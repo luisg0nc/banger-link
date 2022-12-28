@@ -1,0 +1,7 @@
+version: "3"
+services:
+  banger-link:
+    build: .
+    environment:
+      YOUTUBE_API_KEY: 
+      TELEGRAM_API_KEY: 
