@@ -5,3 +5,12 @@ services:
     environment:
       YOUTUBE_API_KEY: 
       TELEGRAM_API_KEY: 
+      IGNORED_DOMAINS: "youtube.com;m.youtube.com;youtu.be"
+      MONGO_HOST: mongodb
+      MONGO_PORT: 27017
+    depends_on:
+      - mongodb
+  mongodb:
+    image: mongo
+    ports:
+      - "27017:27017"
