@@ -31,6 +31,7 @@ client = pymongo.MongoClient(f'mongodb://{MONGO_HOST}:{MONGO_PORT}/')
 db = client.bangerlink
 collection = db.bangerlink
 
+
 def save_song(chat_id, user, song_title, artist, youtube_url):
     """
     Saves music entry data in db.
@@ -51,6 +52,7 @@ def save_song(chat_id, user, song_title, artist, youtube_url):
     result = collection.insert_one(music_data)
 
     logger.info(f"New song added {result}")
+
 
 def search_song_on_youtube(song_title, artist):
     """
@@ -159,7 +161,7 @@ def search_song(bot, update):
     result = collection.find_one(query)
     if result is not None:
         date_str = result["date"].strftime("%d of %m in %Y")
-        
+
         update.message.reply_text(
             f'This banger has been mentioned here {result["hits"]} times. {result["user"]["name"]} first mentioned this banger in this chat {date_str}! \n{result["youtube"]}')
 
@@ -171,9 +173,9 @@ def search_song(bot, update):
 
     # Search YouTube for the song
     youtube_url = search_song_on_youtube(song_title, artist)
-    
-    save_song(chat_id,user, song_title, artist, youtube_url)
-    
+
+    save_song(chat_id, user, song_title, artist, youtube_url)
+
     # Send the YouTube link as a message
     update.message.reply_text(
         f'Here is the Youtube Link, keep on bangin\' 😎\n{youtube_url}')
