@@ -2,12 +2,14 @@ import logging
 import os
 import re
 import pymongo
+import random
 from datetime import datetime
+from pytube import YouTube
 
 from bs4 import BeautifulSoup
 import requests
-from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
-from telegram.ext import Updater, InlineQueryHandler, MessageHandler, Filters
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, MessageHandler, filters, CallbackQueryHandler, ContextTypes
 
 # Enable logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -53,6 +55,21 @@ def save_song(chat_id, user, song_title, artist, youtube_url):
 
     logger.info(f"New song added {result}")
 
+
+def extract_audio(youtube_url, output_path):
+    try:
+        # Create a YouTube object using the provided URL
+        yt = YouTube(youtube_url)
+
+        # Get the best audio stream available
+        audio_stream = yt.streams.filter(only_audio=True, file_extension='mp3').first()
+
+        # Download the audio stream to the specified output path
+        audio_stream.download(output_path)
+
+        logger.info(f'Audio {youtube_url} extraction successful!')
+    except Exception as e:
+        logger.error(f'Error during audio extraction: {e}')
 
 def search_song_on_youtube(song_title, artist):
     """
@@ -129,7 +146,7 @@ def extract_song_info_from_spotify_link(link):
     return song, artist
 
 
-def search_song(bot, update):
+async def search_song(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handler function that is called when a message containing an Apple Music or Spotify link is received.
     Searches YouTube for the song and returns the first result.
@@ -149,7 +166,7 @@ def search_song(bot, update):
     elif any(domain in link for domain in IGNORED_DOMAINS.split(";")):
         return
     else:
-        update.message.reply_text(
+        await update.message.reply_text(
             f"Sorry {user.first_name}, I only support Apple Music (apple.com) and Spotify links (spotify.com), tell Luis to not be lazy and grow my code.")
         return
 
@@ -162,7 +179,7 @@ def search_song(bot, update):
     if result is not None:
         date_str = result["date"].strftime("%d of %m in %Y")
 
-        update.message.reply_text(
+        await update.message.reply_text(
             f'This banger has been mentioned here {result["hits"]} times. {result["user"]["name"]} first mentioned this banger in this chat {date_str}! \n{result["youtube"]}')
 
         newhits = result["hits"] + 1
@@ -170,35 +187,46 @@ def search_song(bot, update):
         collection.update_one(query, update_query)
 
         return
+    
 
     # Search YouTube for the song
     youtube_url = search_song_on_youtube(song_title, artist)
 
     save_song(chat_id, user, song_title, artist, youtube_url)
 
-    # Send the YouTube link as a message
-    update.message.reply_text(
-        f'Here is the Youtube Link, keep on bangin\' 😎\n{youtube_url}')
+    callback_data = chat_id, youtube_url
 
+    keyboard = [InlineKeyboardButton("Download 🚀", callback_data=callback_data)]
+    download_markup = InlineKeyboardMarkup(keyboard)
+
+    # Send the YouTube link as a message
+    await update.message.reply_text(f'Here is the Youtube Link, keep on bangin\' 😎\n{youtube_url}', reply_markup=download_markup)
+
+async def download_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+
+    await query.answer()
+
+    url = query.data.youtube_url
+
+    n = random.randint(0,1000000)
+
+    extract_audio(url,f'/tmp/{n}')
+
+    await query.edit_message_text(text=f'Download started, audio will be coming shortly, keep on scratchin\' 😎\n{youtube_url}')
+
+    await update.send_document(chat_id=query.data.chat_id, document=f'/tmp/{n}')
 
 def main():
     # Create the Updater and pass it the API key
-    updater = Updater(os.environ['TELEGRAM_API_KEY'])
-
-    # Get the dispatcher to register handlers
-    dp = updater.dispatcher
+    application = Application.builder().token(os.environ['TELEGRAM_API_KEY']).build()
 
     # Add the message handler
-    dp.add_handler(MessageHandler(Filters.text, search_song))
+    application.add_handler(MessageHandler(filters.TEXT, search_song))
+    application.add_handler(CallbackQueryHandler(download_button))
 
     # Start the bot
-    updater.start_polling()
-
-    # Run the bot until you press Ctrl-C or the process receives SIGINT,
-    # SIGTERM or SIGABRT. This should be used most of the time, since
-    # start_polling() is non-blocking and will stop the bot gracefully.
-    updater.idle()
-
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
