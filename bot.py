@@ -32,10 +32,8 @@ DATA_DIR = os.environ['DATA_DIR']
 # Initialize the database
 db = TinyDB(DATA_DIR + '/db_music.json')
 
-# Save the user's chat ID and the YouTube URL to the database
-
-
-def save_to_db(chat_id, youtube_url, song_title, artist, user):
+# Save entry to database
+def save_entry(chat_id, youtube_url, song_title, artist, user):
     """
     Saves the user's chat ID and the YouTube URL to the database.
     """
@@ -192,7 +190,7 @@ async def search_song(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     # Search YouTube for the song
     youtube_url = search_song_on_youtube(song_title, artist)
 
-    entry = save_to_db(chat_id, youtube_url, song_title, artist)
+    entry = save_entry(chat_id, youtube_url, song_title, artist, user)
 
     keyboard = [[InlineKeyboardButton(
         "Download 🚀", callback_data=youtube_url)]]

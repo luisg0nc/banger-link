@@ -2,7 +2,7 @@ version: "3"
 services:
   banger-link:
     image: banger-link
-    container_name: bot
+    container_name: banger-link-bot
     build: .
     environment:
       YOUTUBE_API_KEY: 
