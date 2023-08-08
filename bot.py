@@ -2,12 +2,13 @@ import logging
 import os
 import re
 from datetime import datetime
-from pytube import YouTube
 
 from bs4 import BeautifulSoup
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, MessageHandler, filters, CallbackQueryHandler, ContextTypes
+from tinydb import TinyDB, Query, increment
+from pytube import YouTube
 
 # Enable logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -23,14 +24,47 @@ TELEGRAM_API_KEY = os.environ['TELEGRAM_API_KEY']
 # Domains divided by ;
 IGNORED_DOMAINS = os.environ['IGNORED_DOMAINS']
 
-# Mongo for data persistance
-MONGO_HOST = os.environ['MONGO_HOST']
-MONGO_PORT = os.environ['MONGO_PORT']
-
+# Define the download directory and data directory
 DOWNLOAD_DIR = os.environ['DOWNLOAD_DIR']
+DATA_DIR = os.environ['DATA_DIR']
+
+# Initialize the database
+db = TinyDB(DATA_DIR + '/db_music.json')
+
+# Save the user's chat ID and the YouTube URL to the database
+
+
+def save_to_db(chat_id, youtube_url, song_title, artist, user):
+    """
+    Saves the user's chat ID and the YouTube URL to the database.
+    """
+
+    query = Query()
+
+    # Check if the entry already exists in the database
+    if db.contains((query.chat_id == chat_id) and (query.youtube_url == youtube_url)):
+        logger.info(f'Entry {youtube_url} already exists in the database!')
+        db.update(increment('mentions'), (query.chat_id == chat_id)
+                  and (query.youtube_url == youtube_url))
+    else:
+        # Insert the entry into the database
+        db.insert({
+            'chat_id': chat_id,
+            'youtube_url': youtube_url,
+            'song_title': song_title,
+            'artist': artist,
+            'user': user,
+            'mentions': 1,
+            'date': datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        })
+
+    return db.get((query.chat_id == chat_id) and (query.youtube_url == youtube_url))
 
 
 def extract_audio(youtube_url, output_path):
+    """
+    Extracts the audio from a YouTube video and saves it to the specified output path.
+    """
     try:
         # Create a YouTube object using the provided URL
         yt = YouTube(youtube_url)
@@ -137,7 +171,10 @@ async def search_song(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user = update.message.from_user
     chat_id = update.message.chat_id
 
-    link = re.search(r"(https?://[^\s]+)", message).group(0)
+    try:
+        link = re.search(r"(https?://[^\s]+)", message).group(0)
+    except Exception as e:
+        logger.warning(f'Ignoring message since it does not contain a link.')
 
     # Extract the song title and artist from the link
     if "apple.com" in link:
@@ -148,21 +185,29 @@ async def search_song(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
     else:
         await update.message.reply_text(
-            f"Sorry {user.first_name}, I only support Apple Music (apple.com) and Spotify links (spotify.com), tell Luis to not be lazy and grow my code.")
+            f"Sorry {user.first_name}, I only support Apple Music (apple.com) and Spotify links (spotify.com).")
         return
 
     # Search YouTube for the song
     youtube_url = search_song_on_youtube(song_title, artist)
 
+    entry = save_to_db(chat_id, youtube_url, song_title, artist)
+
     keyboard = [[InlineKeyboardButton(
         "Download 🚀", callback_data=youtube_url)]]
     download_markup = InlineKeyboardMarkup(keyboard)
 
-    # Send the YouTube link as a message
-    await update.message.reply_text(f'Here is the Youtube Link, keep on bangin\' 😎\n{youtube_url}', reply_markup=download_markup)
+    if(entry.mentions == 0):
+        # Send the YouTube link as a message
+        await update.message.reply_text(f"Here is the Youtube Link, keep on bangin\' 😎\n{youtube_url}", reply_markup=download_markup)
+    else:
+        await update.message.reply_text(f"This song has been mention here {entry['mentions']} times and was first mentioned by {entry['user']['first_name']} {entry['user']['last_name']}, keep on bagin\' 😎\n{youtube_url}", reply_markup=download_markup)
 
 
 async def download_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handler function that is called when the download button is clicked.
+    """
     query = update.callback_query
 
     # await for someone to click button

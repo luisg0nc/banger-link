@@ -2,3 +2,4 @@ beautifulsoup4==4.9.3
 python-telegram-bot
 requests==2.25.1
 pytube
+tinydb

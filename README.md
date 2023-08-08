@@ -16,9 +16,10 @@ It also allows users to request to extract the audio from the youtube link, uplo
 - Python 3.8 or higher
 - Libraries:
   - `beautifulsoup4`: A library for parsing HTML and XML documents.
-  - `python-telegram-bot`: A library for building Telegram bots.
-  - `requests`: A library for making HTTP requests.
+  - `python-telegram-bot`: Base library for Telegram bot.
+  - `requests`: Library HTTP requests.
   - `pytube`: Library to interface with youtube, necessary to extract audio.
+  - `tinyDB`: Small database to keep track of entries 
 - API keys:
   - Telegram Bot
   - Youtube
@@ -53,6 +54,11 @@ This will build the Docker image and run the container in detached mode.
 3. The bot will send back a YouTube link for the same song
    1. User may click Download
    2. Bot will download audio from youtube and upload to chat
+
+
+## Data
+
+This bot will keep track of the links it has already processed, so that it can keep track of mentions in a chat. This is done using a database, which is stored in the `data` folder. The database is a JSON file, and is managed using the `tinyDB` library.
 
 ## Credits
 
