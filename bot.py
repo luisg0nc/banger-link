@@ -31,24 +31,28 @@ MONGO_PORT = os.environ['MONGO_PORT']
 
 DOWNLOAD_DIR = os.environ['DOWNLOAD_DIR']
 
+
 def extract_audio(youtube_url, output_path):
     try:
         # Create a YouTube object using the provided URL
         yt = YouTube(youtube_url)
 
-        title = re.sub("[!@#$%^&*()[]{};:,./<>?\|`~-=_+]", " ", yt.title).replace(" ", "_")
+        title = re.sub("[!@#$%^&*()[]{};:,./<>?\|`~-=_+]",
+                       " ", yt.title).replace(" ", "_")
 
         audio_stream = yt.streams.get_audio_only()
 
         # Download the audio stream to the specified output path
-        audio_path = audio_stream.download(output_path=output_path, filename=f'{title}.mp4')
+        audio_path = audio_stream.download(
+            output_path=output_path, filename=f'{title}.mp4')
 
         logger.info(f'Audio {youtube_url} extraction successful!')
 
         return audio_path
-    
+
     except Exception as e:
         logger.error(f'Error during audio extraction from {youtube_url}: {e}')
+
 
 def search_song_on_youtube(song_title, artist):
     """
@@ -152,11 +156,13 @@ async def search_song(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     # Search YouTube for the song
     youtube_url = search_song_on_youtube(song_title, artist)
 
-    keyboard = [[InlineKeyboardButton("Download 🚀", callback_data=youtube_url)]]
+    keyboard = [[InlineKeyboardButton(
+        "Download 🚀", callback_data=youtube_url)]]
     download_markup = InlineKeyboardMarkup(keyboard)
 
     # Send the YouTube link as a message
     await update.message.reply_text(f'Here is the Youtube Link, keep on bangin\' 😎\n{youtube_url}', reply_markup=download_markup)
+
 
 async def download_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -169,16 +175,19 @@ async def download_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Edit message so that button disappears
     await query.edit_message_text(text=f'Download started, audio will be coming shortly, keep on scratchin\' 😘\n{youtube_url}')
 
-    path = extract_audio(youtube_url,DOWNLOAD_DIR)
+    path = extract_audio(youtube_url, DOWNLOAD_DIR)
 
     # Upload file
     await context.bot.send_document(chat_id=query.message.chat_id, document=open(path, 'rb'))
 
     # Clean file
     os.remove(path)
+
+
 def main():
     # Create the Updater and pass it the API key
-    application = Application.builder().token(os.environ['TELEGRAM_API_KEY']).build()
+    application = Application.builder().token(
+        os.environ['TELEGRAM_API_KEY']).build()
 
     # Add the message handler
     application.add_handler(MessageHandler(filters.TEXT, search_song))
@@ -186,6 +195,7 @@ def main():
 
     # Start the bot
     application.run_polling()
+
 
 if __name__ == '__main__':
     main()
