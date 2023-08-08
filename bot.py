@@ -7,7 +7,8 @@ from bs4 import BeautifulSoup
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, MessageHandler, filters, CallbackQueryHandler, ContextTypes
-from tinydb import TinyDB, Query, increment
+from tinydb import TinyDB, Query
+from tinydb.operations import increment
 from pytube import YouTube
 
 # Enable logging
