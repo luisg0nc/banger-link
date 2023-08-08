@@ -32,7 +32,17 @@ DATA_DIR = os.environ['DATA_DIR']
 # Initialize the database
 db = TinyDB(DATA_DIR + '/db_music.json')
 
-# Save entry to database
+def user_to_dict(user):
+    """
+    Converts a Telegram user object to a usable dictionary.
+    """
+    return {
+        'id': user.id,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'username': user.username,
+    }
+
 def save_entry(chat_id, youtube_url, song_title, artist, user):
     """
     Saves the user's chat ID and the YouTube URL to the database.
@@ -52,7 +62,7 @@ def save_entry(chat_id, youtube_url, song_title, artist, user):
             'youtube_url': youtube_url,
             'song_title': song_title,
             'artist': artist,
-            'user': user,
+            'user': user_to_dict(user),
             'mentions': 1,
             'date': datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         })
