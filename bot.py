@@ -32,9 +32,12 @@ DATA_DIR = os.environ['DATA_DIR']
 # Initialize the database
 db = TinyDB(DATA_DIR + '/db_music.json')
 
-def user_to_dict(user):
+
+def tguser_to_dict(user):
     """
     Converts a Telegram user object to a usable dictionary.
+    @user: The user object.
+    @return: The dictionary.
     """
     return {
         'id': user.id,
@@ -43,9 +46,16 @@ def user_to_dict(user):
         'username': user.username,
     }
 
+
 def save_entry(chat_id, youtube_url, song_title, artist, user):
     """
     Saves the user's chat ID and the YouTube URL to the database.
+    @chat_id: The chat ID of the user.
+    @youtube_url: The YouTube URL of the video.
+    @song_title: The title of the song.
+    @artist: The artist of the song.
+    @user: The user object.
+    @return: The entry that was saved to the database.
     """
 
     query = Query()
@@ -62,7 +72,7 @@ def save_entry(chat_id, youtube_url, song_title, artist, user):
             'youtube_url': youtube_url,
             'song_title': song_title,
             'artist': artist,
-            'user': user_to_dict(user),
+            'user': tguser_to_dict(user),
             'mentions': 1,
             'date': datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         })
@@ -73,6 +83,9 @@ def save_entry(chat_id, youtube_url, song_title, artist, user):
 def extract_audio(youtube_url, output_path):
     """
     Extracts the audio from a YouTube video and saves it to the specified output path.
+    @youtube_url: The YouTube URL of the video.
+    @output_path: The path to save the audio to.
+    @return: The path to the audio file.
     """
     try:
         # Create a YouTube object using the provided URL
@@ -98,6 +111,9 @@ def extract_audio(youtube_url, output_path):
 def search_song_on_youtube(song_title, artist):
     """
     Searches YouTube for a song with the given title and artist and returns the first result.
+    @song_title: The title of the song.
+    @artist: The artist of the song.
+    @return: The YouTube URL of the first result.
     """
     # Build the query string
     query = song_title + " " + artist
@@ -118,6 +134,8 @@ def search_song_on_youtube(song_title, artist):
 def extract_song_info_from_apple_music_link(link):
     """
     Extracts the song title and artist from an Apple Music link.
+    @link: The Apple Music link.
+    @return: The song title and artist.
     """
 
     # Split the URL into the resource name and the rest of the path
@@ -145,6 +163,8 @@ def extract_song_info_from_apple_music_link(link):
 def extract_song_info_from_spotify_link(link):
     """
     Extracts the song title and artist from a Spotify link.
+    @link: The Spotify link.
+    @return: The song title and artist.
     """
 
     # Split the URL into the resource name and the rest of the path
@@ -174,6 +194,9 @@ async def search_song(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     """
     Handler function that is called when a message containing an Apple Music or Spotify link is received.
     Searches YouTube for the song and returns the first result.
+    @param update: The update object.
+    @param context: The context object.
+    @return: None
     """
     # Get the message and extract the link
     message = update.message.text
@@ -216,6 +239,9 @@ async def search_song(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def download_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handler function that is called when the download button is clicked.
+    @param update: The update object.
+    @param context: The context object.
+    @return: None
     """
     query = update.callback_query
 
@@ -237,6 +263,10 @@ async def download_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 def main():
+    """
+    Main function that starts the bot.
+    """
+
     # Create the Updater and pass it the API key
     application = Application.builder().token(
         os.environ['TELEGRAM_API_KEY']).build()
