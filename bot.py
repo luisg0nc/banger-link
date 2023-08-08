@@ -1,8 +1,6 @@
 import logging
 import os
 import re
-import pymongo
-import random
 from datetime import datetime
 from pytube import YouTube
 
