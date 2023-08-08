@@ -29,47 +29,26 @@ IGNORED_DOMAINS = os.environ['IGNORED_DOMAINS']
 MONGO_HOST = os.environ['MONGO_HOST']
 MONGO_PORT = os.environ['MONGO_PORT']
 
-client = pymongo.MongoClient(f'mongodb://{MONGO_HOST}:{MONGO_PORT}/')
-db = client.bangerlink
-collection = db.bangerlink
-
-
-def save_song(chat_id, user, song_title, artist, youtube_url):
-    """
-    Saves music entry data in db.
-    """
-    music_data = {
-        "chat": chat_id,
-        "date": datetime.utcnow(),
-        "user": {
-            "id": user.id,
-            "name": user.first_name
-        },
-        "title": song_title,
-        "artist": artist,
-        "youtube": youtube_url,
-        "hits": 1
-    }
-
-    result = collection.insert_one(music_data)
-
-    logger.info(f"New song added {result}")
-
+DOWNLOAD_DIR = os.environ['DOWNLOAD_DIR']
 
 def extract_audio(youtube_url, output_path):
     try:
         # Create a YouTube object using the provided URL
         yt = YouTube(youtube_url)
 
-        # Get the best audio stream available
-        audio_stream = yt.streams.filter(only_audio=True, file_extension='mp3').first()
+        title = re.sub("[!@#$%^&*()[]{};:,./<>?\|`~-=_+]", " ", yt.title).replace(" ", "_")
+
+        audio_stream = yt.streams.get_audio_only()
 
         # Download the audio stream to the specified output path
-        audio_stream.download(output_path)
+        audio_path = audio_stream.download(output_path=output_path, filename=f'{title}.mp4')
 
         logger.info(f'Audio {youtube_url} extraction successful!')
+
+        return audio_path
+    
     except Exception as e:
-        logger.error(f'Error during audio extraction: {e}')
+        logger.error(f'Error during audio extraction from {youtube_url}: {e}')
 
 def search_song_on_youtube(song_title, artist):
     """
@@ -170,33 +149,10 @@ async def search_song(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             f"Sorry {user.first_name}, I only support Apple Music (apple.com) and Spotify links (spotify.com), tell Luis to not be lazy and grow my code.")
         return
 
-    query = {
-        "title": song_title,
-        "artist": artist,
-        "chat_id": chat_id
-    }
-    result = collection.find_one(query)
-    if result is not None:
-        date_str = result["date"].strftime("%d of %m in %Y")
-
-        await update.message.reply_text(
-            f'This banger has been mentioned here {result["hits"]} times. {result["user"]["name"]} first mentioned this banger in this chat {date_str}! \n{result["youtube"]}')
-
-        newhits = result["hits"] + 1
-        update_query = {"$set": {"hits": newhits}}
-        collection.update_one(query, update_query)
-
-        return
-    
-
     # Search YouTube for the song
     youtube_url = search_song_on_youtube(song_title, artist)
 
-    save_song(chat_id, user, song_title, artist, youtube_url)
-
-    callback_data = chat_id, youtube_url
-
-    keyboard = [InlineKeyboardButton("Download 🚀", callback_data=callback_data)]
+    keyboard = [[InlineKeyboardButton("Download 🚀", callback_data=youtube_url)]]
     download_markup = InlineKeyboardMarkup(keyboard)
 
     # Send the YouTube link as a message
@@ -205,18 +161,21 @@ async def search_song(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def download_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
 
+    # await for someone to click button
     await query.answer()
 
-    url = query.data.youtube_url
+    youtube_url = query.data
 
-    n = random.randint(0,1000000)
+    # Edit message so that button disappears
+    await query.edit_message_text(text=f'Download started, audio will be coming shortly, keep on scratchin\' 😘\n{youtube_url}')
 
-    extract_audio(url,f'/tmp/{n}')
+    path = extract_audio(youtube_url,DOWNLOAD_DIR)
 
-    await query.edit_message_text(text=f'Download started, audio will be coming shortly, keep on scratchin\' 😎\n{youtube_url}')
+    # Upload file
+    await context.bot.send_document(chat_id=query.message.chat_id, document=open(path, 'rb'))
 
-    await update.send_document(chat_id=query.data.chat_id, document=f'/tmp/{n}')
-
+    # Clean file
+    os.remove(path)
 def main():
     # Create the Updater and pass it the API key
     application = Application.builder().token(os.environ['TELEGRAM_API_KEY']).build()

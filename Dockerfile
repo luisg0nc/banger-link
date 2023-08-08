@@ -10,5 +10,7 @@ RUN pip install -r requirements.txt
 # Copy the source code
 COPY . .
 
+RUN mkdir /app/downloads
+
 # Run the bot
 CMD ["python", "bot.py"]
