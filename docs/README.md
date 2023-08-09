@@ -1,10 +1,4 @@
-<p align="center">
-  <a>
-    <img src="./docs/logo.png" alt="Logo" >
-  </a>
-</p>
-
-# BangerLink 
+# Banger Link 
 
 ![License: MIT](https://shields.io/badge/license-MIT-green)
 
