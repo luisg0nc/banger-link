@@ -1,5 +1,5 @@
 
-# Banger Link <small>0.2</small>
+# BangerLink <small>0.2</small>
 
 > Your music companion on Telegram. 🎵
 
