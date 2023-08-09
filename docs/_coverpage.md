@@ -7,4 +7,4 @@
 - Extract audio from YouTube links and upload to chat.
 
 [GitHub](https://github.com/luisg0nc/banger-link)
-[Get Started](#docsify)
+[Get Started](#banger-link)
