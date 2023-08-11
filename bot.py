@@ -229,7 +229,7 @@ async def search_song(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         "Download 🚀", callback_data=youtube_url)]]
     download_markup = InlineKeyboardMarkup(keyboard)
 
-    if(entry['mentions'] == 0):
+    if(entry['mentions'] == 1):
         # Send the YouTube link as a message
         await update.message.reply_text(f"Here is the Youtube Link, keep on bangin\' 😎\n{youtube_url}", reply_markup=download_markup)
     else:
