@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  banger-link:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: banger-link
+    restart: unless-stopped
+    
+    # Environment configuration
+    env_file: .env  # Load environment variables from .env file
+    environment:
+      - DATA_DIR=/app/data
+      - DOWNLOAD_DIR=/app/data/downloads
+      # Default ignored domains (can be overridden in .env)
+      - IGNORED_DOMAINS=youtube.com;m.youtube.com;youtu.be
+    
+    # Volume mounts for persistent data
+    volumes:
+      - ./data:/app/data           # For database and persistent storage
+      - ./downloads:/app/downloads   # For downloaded media files (if needed)
+    
+    # Health check to monitor bot status
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    # Resource limits (commented out by default)
+    # Uncomment and adjust these values based on your server's capacity
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.50'      # Maximum CPU cores (50% of one core)
+    #       memory: 256M     # Maximum memory
+    #     reservations:
+    #       cpus: '0.25'      # Reserved CPU cores
+    #       memory: 128M     # Reserved memory
+    
+    # Uncomment for development with auto-reload
+    # volumes:
+    #   - .:/app
+    # environment:
+    #   - PYTHONUNBUFFERED=1
+    # command: watchmedo auto-restart --directory=./ --pattern="*.py" --recursive -- python -m banger_link

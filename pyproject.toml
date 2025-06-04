@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=42"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "banger-link"
+version = "1.0.0"
+description = "A Telegram bot for sharing and discovering music links with like/dislike functionality"
+authors = [
+    {name = "Luis Gonçalves", email = "mail@luisg.me"}
+]
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.20.0",
+    "black>=22.0",
+    "isort>=5.0",
+    "mypy>=0.990",
+    "flake8>=4.0",
+]
+
+[project.scripts]
+banger-link = "banger_link.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["banger_link*"]
+
+[tool.black]
+line-length = 88
+target-version = ["py38"]
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+line_length = 88
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true

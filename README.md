@@ -1,104 +1,138 @@
 <p align="center">
   <a>
-    <img src="./docs/logo.png" alt="Logo" >
+    <img src="./docs/logo.png" alt="Banger Link Logo" width="200">
   </a>
+  <h1 align="center">Banger Link</h1>
+  <p align="center">
+    Your music companion on Telegram 🎵
+    <br>
+    <a href="#-features">Features</a> •
+    <a href="#-installation">Installation</a> •
+    <a href="#-usage">Usage</a> •
+    <a href="#-deployment">Deployment</a>
+  </p>
+  <p align="center">
+    <a href="https://github.com/luisg0nc/banger-link/actions">
+      <img src="https://img.shields.io/github/actions/workflow/status/luisg0nc/banger-link/tests.yml?style=flat-square" alt="Build Status">
+    </a>
+    <a href="https://pypi.org/project/banger-link/">
+      <img src="https://img.shields.io/pypi/v/banger-link?style=flat-square" alt="PyPI">
+    </a>
+    <a href="https://github.com/luisg0nc/banger-link/blob/main/LICENSE">
+      <img src="https://img.shields.io/github/license/luisg0nc/banger-link?style=flat-square" alt="License">
+    </a>
+    <a href="https://python-telegram-bot.org">
+      <img src="https://img.shields.io/badge/python--telegram--bot-20.0-blue?style=flat-square" alt="python-telegram-bot">
+    </a>
+  </p>
 </p>
-
-# BangerLink 
-
-![License: MIT](https://shields.io/badge/license-MIT-green)
-
-Your music companion on Telegram. 🎵
 
 ## 💬 What is Banger Link?
 
-This is a Telegram bot that helps you find YouTube links for music from Apple Music and Spotify. Simply send a link to a song from either service, and the bot will retrieve a YouTube link for the same song.
+Banger Link is a Telegram bot that bridges the gap between different music streaming services. Share a song link from Apple Music or Spotify, and the bot will find the corresponding YouTube video and let you download the audio.
 
-This is great for groups of friends who use different music services, as it allows them to share music with each other.
+Perfect for group chats where friends use different music platforms!
 
-## 🔥 Features
-- Find YouTube links for music from Apple Music and Spotify.
-- Extract audio from YouTube links and upload to chat.
-- Keep track of links already processed.
+## ✨ Features
 
-# ✨ Quickstart
+- 🔄 Convert Apple Music and Spotify links to YouTube
+- ⬇️ Download audio directly in your chat
+- 👍👎 Like/Dislike tracks to rate the best bangers
+- 📊 Track how many times a song has been shared
+- 🗂️ Persistent storage of shared songs
+- 🚀 Fast and responsive with modern async code
+- 🔒 Privacy-focused (no data collection)
 
-To run the bot, you'll need to set the `API_KEY` environment variable to your Telegram API key, as well as your Youtube API key. You can then run the `bot.py` script to start the bot.
+## 🚀 Installation
 
-## Talk with the botFather
-
-1. **Open Telegram App:** Open the Telegram app on your device or visit the [Telegram Web](https://web.telegram.org/) version.
-
-2. **Search for BotFather:** In the Telegram search bar, type "BotFather" and select the official BotFather account.
-
-3. **Start a Chat:** Start a chat with BotFather by sending a message like `/start`.
-
-4. **Create a New Bot:** To create a new bot, send the command `/newbot`. BotFather will guide you through the process and ask for a name for your bot.
-
-5. **Choose a Username:** After naming your bot, choose a unique username that ends with "bot" (e.g., MyAwesomeBot).
-
-6. **Get API Key (Token):** Once you've created the bot and chosen a username, BotFather will provide you with the API key (token) for your bot. This token is required to authenticate your bot with the Telegram API.
-
-7. **Copy the API Key:** Copy the provided API key (token) and store it in a safe place. This token is like a password for your bot and should be kept confidential.
-
-
-## Docker
-
-You can also run the provided docker-compose to easily launch it on docker. Just fill the API keys on the docker-compose:
-
-```
-    environment:
-      YOUTUBE_API_KEY: your_youtube_api_key
-      TELEGRAM_API_KEY: your_telegram_api_key
-```
-
-To build and run the Docker container, run the following command:
-
-```
-docker compose build && \
-docker compose up -d
-```
-
-This will build the Docker image and run the container in detached mode.
-
-## How to use
-
-1. Add the bot to a group chat or talk directly to it.
-2. Send a link to a song from Apple Music or Spotify
-3. The bot will send back a YouTube link for the same song
-   1. User may click Download
-   2. Bot will download audio from youtube and upload to chat
-
-## Env File
-
-You can also use an env file to set the API keys. Just copy .env.example to .env and fill the keys.
-
-In order to use the env file in docker-compose, you need to add the following line to the docker-compose.yml file:
-
-```
-docker compose --env-file .env up -d
-```
-
-## Requirements
+### Prerequisites
 
 - Python 3.8 or higher
-- Libraries:
-  - `beautifulsoup4`: A library for parsing HTML and XML documents.
-  - `python-telegram-bot`: Base library for Telegram bot.
-  - `requests`: Library HTTP requests.
-  - `pytube`: Library to interface with youtube, necessary to extract audio.
-  - `tinyDB`: Small database to keep track of entries 
-- API keys:
-  - Telegram Bot
-  - Youtube
+- A [Telegram bot token](https://core.telegram.org/bots#6-botfather)
+- A [YouTube Data API key](https://developers.google.com/youtube/registering_an_application)
 
-## Data
+### Local Installation
 
-This bot will keep track of the links it has already processed, so that it can keep track of mentions in a chat. This is done using a database, which is stored in the `data` folder. The database is a JSON file, and is managed using the `tinyDB` library.
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/luisg0nc/banger-link.git
+   cd banger-link
+   ```
 
-# 🙇‍♂️ Credits
+2. **Create and activate a virtual environment**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
-Thanks to everyone who has worked on these two libraries, they are amazing! 😎
+3. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-[python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
-[pytube](https://github.com/pytube/pytube)
+4. **Configure environment variables**
+   Copy the example environment file and update it with your credentials:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your API keys
+   ```
+
+## 🎮 Usage
+
+### Running the Bot
+
+```bash
+python -m banger_link
+```
+
+### Bot Commands
+
+Just send a link to a song from Apple Music or Spotify, and the bot will handle the rest!
+
+- Share a music link in any chat where the bot is added
+- Use the buttons to like/dislike tracks
+- Download the audio with a single click
+
+## 🐳 Deployment
+
+### Docker
+
+1. Build and run with Docker Compose:
+   ```bash
+   docker-compose up -d --build
+   ```
+
+2. Or build manually:
+   ```bash
+   docker build -t banger-link .
+   docker run -d --env-file .env banger-link
+   ```
+
+### Hosting
+
+For production deployment, consider using:
+
+- [Heroku](https://www.heroku.com/)
+- [Railway](https://railway.app/)
+- [PythonAnywhere](https://www.pythonanywhere.com/)
+- A VPS with Docker
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our [contributing guidelines](CONTRIBUTING.md) for details.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Credits
+
+- [python-telegram-bot](https://python-telegram-bot.org/) - The best Python library for Telegram bots
+- [pytube](https://github.com/pytube/pytube) - For YouTube video downloads
+- [TinyDB](https://tinydb.readthedocs.io/) - For simple JSON-based storage
+
+---
+
+<p align="center">
+  Made with ❤️ by <a href="https://github.com/luisg0nc">Luis Gonçalves</a>
+</p>
