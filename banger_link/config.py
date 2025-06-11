@@ -30,7 +30,18 @@ DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # Other settings
 IGNORED_DOMAINS = os.getenv('IGNORED_DOMAINS', '').split(';') if os.getenv('IGNORED_DOMAINS') else []
-WHITELISTED_CHAT_IDS = [int(x.strip()) for x in os.getenv('WHITELISTED_CHAT_IDS', '').split(',') if x.strip().isdigit()]
+
+# Parse WHITELISTED_CHAT_IDS, handling both positive and negative numbers
+whitelisted_chat_ids = []
+for x in os.getenv('WHITELISTED_CHAT_IDS', '').split(','):
+    x = x.strip()
+    try:
+        if x:  # Only process non-empty strings
+            whitelisted_chat_ids.append(int(x))
+    except ValueError:
+        logger.warning(f"Invalid chat ID in WHITELISTED_CHAT_IDS: {x}")
+
+WHITELISTED_CHAT_IDS = whitelisted_chat_ids
 
 # Logging configuration
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
