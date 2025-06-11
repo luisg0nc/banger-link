@@ -163,52 +163,69 @@ class Database:
         Returns:
             bool: True if the update was successful, False otherwise
         """
+        if reaction not in ('like', 'dislike'):
+            logger.error(f"Invalid reaction type: {reaction}")
+            return False
+            
         with self._lock:
+            # Get the current song state
             song = self.db.get(doc_id=doc_id)
             if not song:
+                logger.error(f"Song with doc_id {doc_id} not found")
                 return False
                 
             # Initialize reactions dictionary if it doesn't exist
             if 'reactions' not in song:
                 song['reactions'] = {}
+                self.db.update({'reactions': {}}, doc_ids=[doc_id])
             
             user_id_str = str(user_id)
             current_reaction = song['reactions'].get(user_id_str)
+            
+            logger.debug(f"Current reaction for user {user_id_str}: {current_reaction}, new reaction: {reaction}")
+            
+            # Prepare updates
             updates = {}
-            likes = song.get('likes', 0)
-            dislikes = song.get('dislikes', 0)
             
-            if reaction == 'like':
-                if current_reaction == 'like':
-                    # Remove like if already liked
-                    updates['reactions.' + user_id_str] = None
-                    updates['likes'] = max(0, likes - 1)
-                else:
-                    # Add like and remove previous dislike if exists
-                    updates['reactions.' + user_id_str] = 'like'
-                    if current_reaction == 'dislike':
-                        updates['dislikes'] = max(0, dislikes - 1)
-                    updates['likes'] = likes + (0 if current_reaction == 'like' else 1)
-                    
-            elif reaction == 'dislike':
-                if current_reaction == 'dislike':
-                    # Remove dislike if already disliked
-                    updates['reactions.' + user_id_str] = None
-                    updates['dislikes'] = max(0, dislikes - 1)
-                else:
-                    # Add dislike and remove previous like if exists
-                    updates['reactions.' + user_id_str] = 'dislike'
-                    if current_reaction == 'like':
-                        updates['likes'] = max(0, likes - 1)
-                    updates['dislikes'] = dislikes + (0 if current_reaction == 'dislike' else 1)
+            # If user is clicking the same reaction again, remove it
+            if current_reaction == reaction:
+                logger.debug("Removing reaction")
+                updates['reactions'] = {k: v for k, v in song['reactions'].items() if k != user_id_str}
+                updates[reaction + 's'] = max(0, song.get(reaction + 's', 0) - 1)
+            # If user is changing their reaction
+            elif current_reaction is not None:
+                logger.debug("Changing reaction")
+                # Remove old reaction count
+                updates[current_reaction + 's'] = max(0, song.get(current_reaction + 's', 0) - 1)
+                # Add new reaction
+                updates['reactions'] = {**song['reactions'], user_id_str: reaction}
+                updates[reaction + 's'] = song.get(reaction + 's', 0) + 1
+            # If user is adding a new reaction
+            else:
+                logger.debug("Adding new reaction")
+                updates['reactions'] = {**song['reactions'], user_id_str: reaction}
+                updates[reaction + 's'] = song.get(reaction + 's', 0) + 1
             
-            # Clean up None values in reactions
-            if updates.get('reactions.' + user_id_str) is None:
-                updates['$unset'] = {'reactions.' + user_id_str: ""}
-            
+            # Apply updates atomically
             if updates:
-                self.db.update(updates, doc_ids=[doc_id])
-                return True
+                logger.debug(f"Applying updates: {updates}")
+                try:
+                    # First update the reaction counts
+                    self.db.update(
+                        {
+                            'likes': updates.get('likes', song.get('likes', 0)),
+                            'dislikes': updates.get('dislikes', song.get('dislikes', 0)),
+                            'reactions': updates.get('reactions', song.get('reactions', {}))
+                        },
+                        doc_ids=[doc_id]
+                    )
+                    logger.debug("Update successful")
+                    return True
+                except Exception as e:
+                    logger.error(f"Error updating reaction: {e}")
+                    return False
+            
+            logger.debug("No updates to apply")
             return False
 
 # Initialize the database

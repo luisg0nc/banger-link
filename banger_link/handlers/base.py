@@ -170,38 +170,58 @@ class BaseHandler:
         user = query.from_user
         chat_id = query.message.chat_id
         
-        # First, get the song to get its doc_id
-        song = db.get_song(chat_id, youtube_url)
-        if not song:
-            await query.answer("Error: Song not found")
-            return
-        
-        # Update reaction in database
-        success = db.update_reaction(song.doc_id, reaction_type, user.id)
-        
-        if not success:
-            await query.answer("Error: Could not update reaction")
-            return
-        
-        # Get the updated song to get the latest counts
-        updated_song = db.get_song(chat_id, youtube_url)
-        
-        # Get the user's current reaction for this song
-        user_reaction = None
-        if 'reactions' in updated_song and str(user.id) in updated_song['reactions']:
-            user_reaction = updated_song['reactions'][str(user.id)]
-        
-        # Update the message with new reaction counts
-        keyboard = cls.create_song_keyboard(
-            youtube_url, 
-            updated_song.get('likes', 0), 
-            updated_song.get('dislikes', 0),
-            user_reaction
-        )
-        
-        # Edit the message to update the keyboard
-        await query.edit_message_reply_markup(reply_markup=keyboard)
-        
-        # Send a small feedback to the user
-        reaction_emoji = '👍' if reaction_type == 'like' else '👎'
-        await query.answer(f"You {reaction_type}d this song! {reaction_emoji}")
+        try:
+            # Get the song to get its doc_id
+            song = db.get_song(chat_id, youtube_url)
+            if not song:
+                logger.error(f"Song not found for chat_id: {chat_id}, url: {youtube_url}")
+                await query.answer("Error: Song not found", show_alert=True)
+                return
+            
+            logger.debug(f"Updating reaction for user {user.id} on song {song.doc_id}")
+            
+            # Update reaction in database
+            success = db.update_reaction(song.doc_id, reaction_type, user.id)
+            
+            if not success:
+                logger.error(f"Failed to update reaction for user {user.id} on song {song.doc_id}")
+                await query.answer("Error: Could not update reaction", show_alert=True)
+                return
+            
+            # Get the updated song to get the latest counts
+            updated_song = db.get_song(chat_id, youtube_url)
+            if not updated_song:
+                logger.error(f"Failed to get updated song for chat_id: {chat_id}, url: {youtube_url}")
+                await query.answer("Error: Could not update reaction", show_alert=True)
+                return
+            
+            # Get the user's current reaction for this song
+            user_reaction = None
+            if 'reactions' in updated_song and str(user.id) in updated_song['reactions']:
+                user_reaction = updated_song['reactions'][str(user.id)]
+            
+            logger.debug(f"Updated song state: {updated_song}")
+            
+            # Update the message with new reaction counts
+            keyboard = cls.create_song_keyboard(
+                youtube_url, 
+                updated_song.get('likes', 0), 
+                updated_song.get('dislikes', 0),
+                user_reaction
+            )
+            
+            # Edit the message to update the keyboard and provide feedback
+            await query.edit_message_reply_markup(reply_markup=keyboard)
+            
+            # Show feedback to the user
+            if user_reaction == reaction_type:
+                # User toggled off their reaction
+                await query.answer("Reaction removed")
+            else:
+                # User changed or added a reaction
+                reaction_emoji = '👍' if reaction_type == 'like' else '👎'
+                await query.answer(f"You {reaction_type}d this song! {reaction_emoji}")
+            
+        except Exception as e:
+            logger.error(f"Error in handle_reaction: {e}", exc_info=True)
+            await query.answer("An error occurred. Please try again.", show_alert=True)
