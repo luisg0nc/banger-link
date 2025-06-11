@@ -76,15 +76,16 @@ class Database:
             if existing:
                 # Update existing entry
                 doc_id = existing.doc_id
-                self.db.update(
-                    {
-                        'mentions': existing.get('mentions', 0) + 1,
-                        'likes': existing.get('likes', 0),
-                        'dislikes': existing.get('dislikes', 0),
-                        'last_mentioned': datetime.now().isoformat()
-                    },
-                    doc_ids=[doc_id]
-                )
+                update_data = {
+                    'mentions': existing.get('mentions', 0) + 1,
+                    'last_mentioned': datetime.now().isoformat()
+                }
+                
+                # Preserve existing reactions if they exist
+                if 'reactions' not in existing:
+                    update_data['reactions'] = {}
+                    
+                self.db.update(update_data, doc_ids=[doc_id])
                 return self.db.get(doc_id=doc_id)
             else:
                 # Create new entry
@@ -97,54 +98,113 @@ class Database:
                     'mentions': 1,
                     'likes': 0,
                     'dislikes': 0,
+                    'reactions': {},
                     'date_added': datetime.now().isoformat(),
                     'last_mentioned': datetime.now().isoformat()
                 })
                 return self.db.get(doc_id=doc_id)
     
     def get_song(self, chat_id: int, youtube_url: str) -> Optional[Dict[str, Any]]:
-        """Get a song by chat ID and YouTube URL."""
+        """
+        Get a song by chat ID and YouTube URL.
+        
+        Args:
+            chat_id: The chat ID
+            youtube_url: The YouTube URL of the song
+            
+        Returns:
+            The song document with ensured 'reactions' field, or None if not found
+        """
         with self._lock:
-            return self.db.get(
+            song = self.db.get(
                 (self.query.chat_id == chat_id) & 
                 (self.query.youtube_url == youtube_url)
             )
+            
+            # Ensure the song has a reactions field for backward compatibility
+            if song and 'reactions' not in song:
+                song['reactions'] = {}
+                self.db.update({'reactions': {}}, doc_ids=[song.doc_id])
+                
+            return song
     
     def get_songs_by_chat(self, chat_id: int) -> List[Dict[str, Any]]:
-        """Get all songs for a specific chat."""
+        """
+        Get all songs for a specific chat.
+        
+        Args:
+            chat_id: The chat ID to get songs for
+            
+        Returns:
+            List of song documents, each with ensured 'reactions' field
+        """
         with self._lock:
-            return self.db.search(self.query.chat_id == chat_id)
+            songs = self.db.search(self.query.chat_id == chat_id)
+            
+            # Ensure all songs have a reactions field
+            updated = False
+            for song in songs:
+                if 'reactions' not in song:
+                    song['reactions'] = {}
+                    self.db.update({'reactions': {}}, doc_ids=[song.doc_id])
+                    updated = True
+            
+            return songs
     
-    def update_reaction(self, doc_id: int, reaction: str) -> bool:
-        """Update the reaction for a song."""
+    def update_reaction(self, doc_id: int, reaction: str, user_id: int) -> bool:
+        """
+        Update the reaction for a song by a specific user.
+        
+        Args:
+            doc_id: The document ID of the song
+            reaction: The reaction type ('like' or 'dislike')
+            user_id: The ID of the user reacting
+            
+        Returns:
+            bool: True if the update was successful, False otherwise
+        """
         with self._lock:
             song = self.db.get(doc_id=doc_id)
             if not song:
                 return False
                 
+            # Initialize reactions dictionary if it doesn't exist
+            if 'reactions' not in song:
+                song['reactions'] = {}
+            
+            user_id_str = str(user_id)
+            current_reaction = song['reactions'].get(user_id_str)
             updates = {}
+            likes = song.get('likes', 0)
+            dislikes = song.get('dislikes', 0)
+            
             if reaction == 'like':
-                # If already liked, remove like, else toggle
-                if song.get('user_reaction') == 'like':
-                    updates['likes'] = max(0, song.get('likes', 1) - 1)
-                    updates['user_reaction'] = None
+                if current_reaction == 'like':
+                    # Remove like if already liked
+                    updates['reactions.' + user_id_str] = None
+                    updates['likes'] = max(0, likes - 1)
                 else:
-                    # Remove any previous dislike if exists
-                    if song.get('user_reaction') == 'dislike':
-                        updates['dislikes'] = max(0, song.get('dislikes', 1) - 1)
-                    updates['likes'] = song.get('likes', 0) + 1
-                    updates['user_reaction'] = 'like'
+                    # Add like and remove previous dislike if exists
+                    updates['reactions.' + user_id_str] = 'like'
+                    if current_reaction == 'dislike':
+                        updates['dislikes'] = max(0, dislikes - 1)
+                    updates['likes'] = likes + (0 if current_reaction == 'like' else 1)
+                    
             elif reaction == 'dislike':
-                # If already disliked, remove dislike, else toggle
-                if song.get('user_reaction') == 'dislike':
-                    updates['dislikes'] = max(0, song.get('dislikes', 1) - 1)
-                    updates['user_reaction'] = None
+                if current_reaction == 'dislike':
+                    # Remove dislike if already disliked
+                    updates['reactions.' + user_id_str] = None
+                    updates['dislikes'] = max(0, dislikes - 1)
                 else:
-                    # Remove any previous like if exists
-                    if song.get('user_reaction') == 'like':
-                        updates['likes'] = max(0, song.get('likes', 1) - 1)
-                    updates['dislikes'] = song.get('dislikes', 0) + 1
-                    updates['user_reaction'] = 'dislike'
+                    # Add dislike and remove previous like if exists
+                    updates['reactions.' + user_id_str] = 'dislike'
+                    if current_reaction == 'like':
+                        updates['likes'] = max(0, likes - 1)
+                    updates['dislikes'] = dislikes + (0 if current_reaction == 'dislike' else 1)
+            
+            # Clean up None values in reactions
+            if updates.get('reactions.' + user_id_str) is None:
+                updates['$unset'] = {'reactions.' + user_id_str: ""}
             
             if updates:
                 self.db.update(updates, doc_ids=[doc_id])

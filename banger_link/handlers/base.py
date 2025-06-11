@@ -40,10 +40,6 @@ class BaseHandler:
                 InlineKeyboardButton(
                     f"{dislike_emoji} {dislikes}", 
                     callback_data=f"reaction:dislike:{youtube_url}"
-                ),
-                InlineKeyboardButton(
-                    "Download 🚀", 
-                    callback_data=f"download:{youtube_url}"
                 )
             ]
         ]
@@ -181,7 +177,7 @@ class BaseHandler:
             return
         
         # Update reaction in database
-        success = db.update_reaction(song.doc_id, reaction_type)
+        success = db.update_reaction(song.doc_id, reaction_type, user.id)
         
         if not success:
             await query.answer("Error: Could not update reaction")
@@ -190,12 +186,17 @@ class BaseHandler:
         # Get the updated song to get the latest counts
         updated_song = db.get_song(chat_id, youtube_url)
         
+        # Get the user's current reaction for this song
+        user_reaction = None
+        if 'reactions' in updated_song and str(user.id) in updated_song['reactions']:
+            user_reaction = updated_song['reactions'][str(user.id)]
+        
         # Update the message with new reaction counts
         keyboard = cls.create_song_keyboard(
             youtube_url, 
             updated_song.get('likes', 0), 
             updated_song.get('dislikes', 0),
-            updated_song.get('user_reaction')
+            user_reaction
         )
         
         # Edit the message to update the keyboard
