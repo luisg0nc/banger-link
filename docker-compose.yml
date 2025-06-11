@@ -2,47 +2,58 @@ version: '3.8'
 
 services:
   banger-link:
+    user: "1000:1000"
     build:
       context: .
       dockerfile: Dockerfile
     container_name: banger-link
     restart: unless-stopped
-    
-    # Environment configuration
-    env_file: .env  # Load environment variables from .env file
     environment:
       - DATA_DIR=/app/data
       - DOWNLOAD_DIR=/app/data/downloads
-      # Default ignored domains (can be overridden in .env)
       - IGNORED_DOMAINS=youtube.com;m.youtube.com;youtu.be
-    
-    # Volume mounts for persistent data
+    env_file: .env
     volumes:
-      - ./data:/app/data           # For database and persistent storage
-      - ./downloads:/app/downloads   # For downloaded media files (if needed)
-    
-    # Health check to monitor bot status
+      - ./data:/app/data
+      - ./downloads:/app/downloads
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
-    
-    # Resource limits (commented out by default)
-    # Uncomment and adjust these values based on your server's capacity
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.50'      # Maximum CPU cores (50% of one core)
-    #       memory: 256M     # Maximum memory
-    #     reservations:
-    #       cpus: '0.25'      # Reserved CPU cores
-    #       memory: 128M     # Reserved memory
-    
-    # Uncomment for development with auto-reload
-    # volumes:
-    #   - .:/app
-    # environment:
-    #   - PYTHONUNBUFFERED=1
-    # command: watchmedo auto-restart --directory=./ --pattern="*.py" --recursive -- python -m banger_link
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+  
+  banger_web:
+    user: "node:node"
+    environment:
+      - NODE_ENV=production
+      - DB_PATH=/data/db_music.json
+    build:
+      context: ./banger_web
+      dockerfile: Dockerfile
+    container_name: banger-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/data
+      - /usr/bin/flock:/usr/bin/flock
+      - /bin/flock:/bin/flock
+    depends_on:
+      - banger-link
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M

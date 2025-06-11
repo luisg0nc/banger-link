@@ -30,6 +30,7 @@ DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # Other settings
 IGNORED_DOMAINS = os.getenv('IGNORED_DOMAINS', '').split(';') if os.getenv('IGNORED_DOMAINS') else []
+WHITELISTED_CHAT_IDS = [int(x.strip()) for x in os.getenv('WHITELISTED_CHAT_IDS', '').split(',') if x.strip().isdigit()]
 
 # Logging configuration
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')

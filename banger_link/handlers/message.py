@@ -6,7 +6,7 @@ from typing import Optional
 from telegram import Update
 from telegram.ext import ContextTypes, MessageHandler, filters
 
-from banger_link.config import IGNORED_DOMAINS
+from banger_link.config import IGNORED_DOMAINS, WHITELISTED_CHAT_IDS
 from banger_link.handlers.base import BaseHandler
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,11 @@ class MessageHandlers:
         """Handle incoming messages."""
         # Ignore messages without text
         if not update.message or not update.message.text:
+            return
+            
+        # Check if chat is whitelisted (if whitelist is not empty)
+        if WHITELISTED_CHAT_IDS and update.message.chat_id not in WHITELISTED_CHAT_IDS:
+            logger.debug(f"Ignored message from non-whitelisted chat ID: {update.message.chat_id}")
             return
         
         # Extract URL from message

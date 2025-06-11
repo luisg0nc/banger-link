@@ -57,11 +57,12 @@ class BaseHandler:
         
         # Extract song info
         service, song_title, artist = MusicExtractor.extract_song_info(link)
-        
+        print(service, song_title, artist)
         if not all([service, song_title, artist]):
             await update.message.reply_text(
                 "Sorry, I couldn't extract song information from that link. "
-                "I support Apple Music and Spotify links."
+                "I support Apple Music and Spotify links.\n\n"
+                "Help the project at https://github.com/luisg0nc/banger-link"
             )
             return
         
@@ -71,7 +72,8 @@ class BaseHandler:
         if not youtube_url:
             await update.message.reply_text(
                 "Sorry, I couldn't find that song on YouTube. "
-                "Please try a different song or check the spelling."
+                "Please try a different song or check the spelling.\n\n"
+                "Help the project at https://github.com/luisg0nc/banger-link"
             )
             return
         
@@ -83,15 +85,15 @@ class BaseHandler:
         if entry['mentions'] == 1:
             message = (
                 f"🎵 *{song_title}* by *{artist}*\n\n"
-                f"First time shared by {user.first_name}! 🎉\n"
-                f"{youtube_url}"
+                f"First time on Bangers Society Database! 🎉\n\n"
+                f"🔗 {youtube_url}"
             )
         else:
             message = (
                 f"🎵 *{song_title}* by *{artist}*\n\n"
                 f"Shared {entry['mentions']} times. "
-                f"First shared by {entry['user']['first_name']}.\n"
-                f"{youtube_url}"
+                f"First shared by {entry['user']['first_name']}.\n\n"
+                f"🔗 {youtube_url}"
             )
         
         # Send message with reaction buttons
@@ -118,7 +120,7 @@ class BaseHandler:
         # Edit message to show download started
         await query.edit_message_text(
             text=('🎵 Downloading audio... This may take a moment. 🎵\n\n'
-                  f'*YouTube Link:* {youtube_url}'),
+                  f'🔗 {youtube_url}'),
             parse_mode='Markdown',
             disable_web_page_preview=True
         )
@@ -141,7 +143,7 @@ class BaseHandler:
             # Update message to show completion
             await query.edit_message_text(
                 text=('✅ Download complete! Enjoy your music! 🎧\n\n'
-                      f'*YouTube Link:* {youtube_url}'),
+                      f'🔗 {youtube_url}'),
                 parse_mode='Markdown',
                 disable_web_page_preview=True
             )
@@ -149,9 +151,9 @@ class BaseHandler:
         except Exception as e:
             logger.error(f"Error in download handler: {e}")
             await query.edit_message_text(
-                text=('❌ Sorry, there was an error downloading the audio. '
+                text=('❌ Sorry, there was an error downloading the audio.\n'
                       'Please try again later.\n\n'
-                      f'*YouTube Link:* {youtube_url}'),
+                      f'🔗 {youtube_url}'),
                 parse_mode='Markdown',
                 disable_web_page_preview=True
             )
