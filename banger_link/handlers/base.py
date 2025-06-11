@@ -174,19 +174,28 @@ class BaseHandler:
         user = query.from_user
         chat_id = query.message.chat_id
         
-        # Update reaction in database
-        entry = db.update_reaction(chat_id, youtube_url, reaction_type)
-        
-        if not entry:
+        # First, get the song to get its doc_id
+        song = db.get_song(chat_id, youtube_url)
+        if not song:
             await query.answer("Error: Song not found")
             return
+        
+        # Update reaction in database
+        success = db.update_reaction(song.doc_id, reaction_type)
+        
+        if not success:
+            await query.answer("Error: Could not update reaction")
+            return
+        
+        # Get the updated song to get the latest counts
+        updated_song = db.get_song(chat_id, youtube_url)
         
         # Update the message with new reaction counts
         keyboard = cls.create_song_keyboard(
             youtube_url, 
-            entry.get('likes', 0), 
-            entry.get('dislikes', 0),
-            entry.get('user_reaction')
+            updated_song.get('likes', 0), 
+            updated_song.get('dislikes', 0),
+            updated_song.get('user_reaction')
         )
         
         # Edit the message to update the keyboard
