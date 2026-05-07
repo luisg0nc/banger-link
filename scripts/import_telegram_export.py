@@ -42,17 +42,19 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
+import httpx
 from bs4 import BeautifulSoup, Tag
 
-# Make the project root importable so we can reuse SonglinkClient. Settings
-# instantiates eagerly on import — feed it a stub token long enough to pass
-# pydantic's min_length check, since this script doesn't talk to Telegram.
+# Make the project root importable so we can reuse the parsed-payload helpers
+# from banger_link.services.songlink. Settings instantiates eagerly on import —
+# feed it a stub token long enough to pass pydantic's min_length check, since
+# this script doesn't talk to Telegram.
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("TELEGRAM_TOKEN", "stub:token-for-importer")
 
 from banger_link.handlers.messages import MUSIC_DOMAIN_SUFFIXES  # noqa: E402
-from banger_link.services.songlink import ResolvedSong, SonglinkClient  # noqa: E402
+from banger_link.services.songlink import ResolvedSong, _parse  # noqa: E402
 
 logger = logging.getLogger("banger_link.import")
 
@@ -144,40 +146,49 @@ def parse_export(paths: list[Path]) -> list[HistoricalShare]:
 # ---------------------------------------------------------------------------
 
 
-class CachedResolver:
-    """Resolves Songlink URLs with a disk cache and a 429-aware throttle.
+SONGLINK_URL = "https://api.song.link/v1-alpha.1/links"
 
-    Songlink's free tier sits around 10 req/min but the limit is bursty — even
-    a steady 6 s cadence trips it. We do one request at a time, sleep
-    `throttle_seconds` between calls, and back off `cool_down_seconds` whenever
-    the underlying client gives up on a 429. Negative results are NOT cached
-    (so we can resume without re-flushing on every fix).
+
+class CachedResolver:
+    """Resolves Songlink URLs with a disk cache and a 429-aware backoff.
+
+    Talks to the Songlink API directly (instead of going through SonglinkClient)
+    so the importer can react to status codes — long backoff on 429 (rate
+    limit), no backoff on 404 (real "not on Songlink"), short backoff on other
+    transient errors. Successful resolutions and definitive 404s are cached;
+    transient failures are retried.
     """
 
     def __init__(
         self,
         cache_path: Path,
-        client: SonglinkClient,
+        client: httpx.AsyncClient,
         *,
         throttle_seconds: float,
-        cool_down_seconds: float,
+        rate_limit_cool_down: float,
         cache_only: bool = False,
     ) -> None:
         self._path = cache_path
         self._client = client
         self._throttle = throttle_seconds
-        self._cool_down = cool_down_seconds
+        self._rate_limit_cool_down = rate_limit_cool_down
         self._cache_only = cache_only
         self._last_call_at: float = 0.0
-        self._cache: dict[str, dict] = {}
+        self._consecutive_429s: int = 0
+        self._cache: dict[str, dict | str] = {}
         if cache_path.exists():
             raw = json.loads(cache_path.read_text())
+            # We allow two cache shapes: dict (resolved song) or "404" sentinel
+            # (definitively not on Songlink — skip on resume).
             self._cache = {k: v for k, v in raw.items() if v is not None}
-            logger.info("Loaded %d cached resolutions from %s", len(self._cache), cache_path)
+            logger.info("Loaded %d cached entries from %s", len(self._cache), cache_path)
 
     async def resolve(self, url: str) -> ResolvedSong | None:
         if url in self._cache:
             cached = self._cache[url]
+            if cached == "404":
+                return None
+            assert isinstance(cached, dict)
             return ResolvedSong(
                 entity_id=cached["entity_id"],
                 title=cached["title"],
@@ -191,25 +202,71 @@ class CachedResolver:
             return None
 
         await self._wait_for_slot()
-        resolved = await self._client.resolve(url)
 
-        if resolved is None:
-            # We can't tell from here whether this was a 429 give-up or a real
-            # 404 / malformed payload. Back off the longer interval so we don't
-            # keep hammering. Negative results are not cached on disk.
-            await asyncio.sleep(self._cool_down)
+        try:
+            response = await self._client.get(
+                SONGLINK_URL,
+                params={"url": url, "userCountry": "US"},
+            )
+        except httpx.HTTPError as exc:
+            logger.warning("transport error for %s: %s — pausing %.0fs", url, exc, self._throttle)
+            await asyncio.sleep(self._throttle)
             return None
 
-        self._cache[url] = {
-            "entity_id": resolved.entity_id,
-            "title": resolved.title,
-            "artist": resolved.artist,
-            "thumbnail_url": resolved.thumbnail_url,
-            "page_url": resolved.page_url,
-            "platform_links": resolved.platform_links,
-        }
-        self._flush()
-        return resolved
+        status = response.status_code
+        if status == 200:
+            self._consecutive_429s = 0
+            try:
+                payload = response.json()
+            except ValueError:
+                logger.warning("non-JSON 200 for %s", url)
+                return None
+            resolved = _parse(payload)
+            if resolved is None:
+                logger.info("Songlink returned a non-song payload for %s", url)
+                self._cache[url] = "404"
+                self._flush()
+                return None
+            self._cache[url] = {
+                "entity_id": resolved.entity_id,
+                "title": resolved.title,
+                "artist": resolved.artist,
+                "thumbnail_url": resolved.thumbnail_url,
+                "page_url": resolved.page_url,
+                "platform_links": resolved.platform_links,
+            }
+            self._flush()
+            return resolved
+
+        if status == 404:
+            # Definitive — Songlink doesn't know this URL. Cache so we don't
+            # keep retrying on resume.
+            self._consecutive_429s = 0
+            logger.info("404 for %s (cached as not-found)", url)
+            self._cache[url] = "404"
+            self._flush()
+            return None
+
+        if status == 429:
+            self._consecutive_429s += 1
+            # Exponential within reason — 60s, 120s, 240s, then capped at 5 min.
+            backoff = min(
+                self._rate_limit_cool_down * (2 ** (self._consecutive_429s - 1)),
+                300.0,
+            )
+            logger.warning(
+                "429 for %s (streak=%d) — sleeping %.0fs",
+                url,
+                self._consecutive_429s,
+                backoff,
+            )
+            await asyncio.sleep(backoff)
+            return None
+
+        # 4xx (other) / 5xx — log and short-pause. Don't cache; retry on resume.
+        logger.warning("HTTP %d for %s — pausing %.0fs", status, url, self._throttle)
+        await asyncio.sleep(self._throttle)
+        return None
 
     async def _wait_for_slot(self) -> None:
         loop = asyncio.get_event_loop()
@@ -347,14 +404,15 @@ async def run(
     unique_urls = {s.url for s in shares}
     logger.info("Unique URLs: %d (across %d shares)", len(unique_urls), len(shares))
 
-    # Disable internal retries — the importer's throttle does the right thing,
-    # and PTB's retry would just spam Songlink with extra 429s on a hot URL.
-    client = SonglinkClient(max_retries=0)
+    client = httpx.AsyncClient(
+        timeout=httpx.Timeout(15.0),
+        headers={"User-Agent": "banger-link-importer/2.0"},
+    )
     resolver = CachedResolver(
         cache_path,
         client,
         throttle_seconds=throttle,
-        cool_down_seconds=cool_down,
+        rate_limit_cool_down=cool_down,
         cache_only=cache_only,
     )
 
@@ -453,8 +511,8 @@ def main() -> None:
     parser.add_argument(
         "--cool-down",
         type=float,
-        default=45.0,
-        help="Seconds to sleep after a failed/rate-limited call before the next request.",
+        default=60.0,
+        help="Base seconds to sleep after a 429 (doubles on consecutive 429s, capped at 300).",
     )
     parser.add_argument(
         "--cache-only",
