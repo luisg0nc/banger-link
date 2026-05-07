@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import time
 from pathlib import Path
+from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from pydantic import Field, HttpUrl, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -18,8 +19,10 @@ class Settings(BaseSettings):
 
     telegram_token: str = Field(min_length=10)
 
-    whitelisted_chat_ids: list[int] = Field(default_factory=list)
-    ignored_domains: list[str] = Field(default_factory=list)
+    # NoDecode keeps pydantic-settings from JSON-parsing these env-var values;
+    # the field validators below split them on our own delimiters instead.
+    whitelisted_chat_ids: Annotated[list[int], NoDecode] = Field(default_factory=list)
+    ignored_domains: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
     data_dir: Path = Path("./data")
     log_level: str = "INFO"
