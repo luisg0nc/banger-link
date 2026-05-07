@@ -1,3 +1,7 @@
+# Local operator notes — kept out of the public repo so private cluster info,
+# runbook entries, etc. can live here.
+CLAUDE.md
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
