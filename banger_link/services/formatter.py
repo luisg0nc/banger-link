@@ -27,6 +27,11 @@ PLATFORM_LABELS: dict[str, tuple[str, str]] = {
     "napster": ("🔵", "Napster"),
 }
 
+# Platforms whose absence we explicitly call out under a share — Songlink has
+# real catalog gaps for these (especially Spotify and YouTube on niche tracks),
+# and silently dropping them looks like a bot bug to users.
+EXPECTED_PLATFORMS: tuple[str, ...] = ("spotify", "appleMusic", "youtube")
+
 
 def platform_lines(links: dict[str, str]) -> str:
     """Render a multi-line list of platform → hyperlinked label entries."""
@@ -52,6 +57,10 @@ def share_message(
     header = f"🎵 <b>{escape(song.title)}</b> — <i>{escape(song.artist)}</i>"
     lines = [header, ""]
     lines.extend(_platform_lines(song.platform_links))
+
+    if footer := _missing_platforms_footer(song.platform_links):
+        lines.append("")
+        lines.append(footer)
 
     if mention.is_first_time:
         lines.append("")
@@ -118,6 +127,14 @@ def reaction_toast(state: ReactionState, applied_kind: str) -> str:
 
 def _platform_lines(links: dict[str, str]) -> list[str]:
     return [_platform_lines_str(links)]
+
+
+def _missing_platforms_footer(links: dict[str, str]) -> str | None:
+    missing = [p for p in EXPECTED_PLATFORMS if p not in links]
+    if not missing:
+        return None
+    names = ", ".join(PLATFORM_LABELS[p][1] for p in missing)
+    return f"⚠️ Not on: <i>{escape(names)}</i>"
 
 
 def _platform_lines_str(links: dict[str, str]) -> str:

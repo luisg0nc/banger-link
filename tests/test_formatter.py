@@ -137,3 +137,79 @@ def test_help_message_lists_commands() -> None:
     text = help_message()
     for cmd in ("/top", "/weekly", "/monthly", "/search", "/help"):
         assert cmd in text
+
+
+def _mention(*, is_first_time: bool = True) -> MentionResult:
+    return MentionResult(
+        chat_song_id=1,
+        song_id=1,
+        mentions=1,
+        first_user_name="Alice",
+        first_seen_at="2025-01-01 12:00:00",
+        is_first_time=is_first_time,
+    )
+
+
+def _with_links(**links: str) -> ResolvedSong:
+    base = _resolved()
+    return ResolvedSong(
+        entity_id=base.entity_id,
+        title=base.title,
+        artist=base.artist,
+        thumbnail_url=base.thumbnail_url,
+        page_url=base.page_url,
+        platform_links=links,
+    )
+
+
+def test_share_message_no_warning_when_all_big_three_present() -> None:
+    text = share_message(
+        song=_with_links(
+            spotify="https://s",
+            appleMusic="https://a",
+            youtube="https://y",
+        ),
+        mention=_mention(),
+    )
+    assert "Not on:" not in text
+
+
+def test_share_message_warns_about_missing_spotify_only() -> None:
+    text = share_message(
+        song=_with_links(
+            appleMusic="https://a",
+            youtube="https://y",
+        ),
+        mention=_mention(),
+    )
+    assert "Not on:" in text
+    # The footer mentions Spotify, only Spotify, and not the others.
+    footer = text.split("Not on:", 1)[1].splitlines()[0]
+    assert "Spotify" in footer
+    assert "Apple Music" not in footer
+    assert "YouTube" not in footer
+
+
+def test_share_message_warns_about_all_three_missing() -> None:
+    text = share_message(
+        song=_with_links(tidal="https://t"),
+        mention=_mention(),
+    )
+    assert "Not on:" in text
+    footer = text.split("Not on:", 1)[1]
+    assert "Spotify" in footer
+    assert "Apple Music" in footer
+    assert "YouTube" in footer
+
+
+def test_share_message_footer_appears_after_platforms_before_recap() -> None:
+    # Use a repeat (not first-time) so the recap text is "Shared …" — gives us
+    # a more distinctive anchor than the celebration line.
+    text = share_message(
+        song=_with_links(tidal="https://t"),
+        mention=_mention(is_first_time=False),
+    )
+    tidal_pos = text.index("Tidal")
+    warning_pos = text.index("Not on:")
+    recap_pos = text.index("Shared")
+    assert tidal_pos < warning_pos < recap_pos
