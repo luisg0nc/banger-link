@@ -17,7 +17,9 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.9 /uv /uvx /usr/local/bin/
 COPY pyproject.toml uv.lock* ./
 RUN uv sync --frozen --no-install-project --no-dev || uv sync --no-install-project --no-dev
 
-# Copy source and install the project itself.
+# Copy source and install the project itself. README + LICENSE are required
+# at build time because pyproject.toml references them.
+COPY README.md LICENSE ./
 COPY banger_link ./banger_link
 RUN uv sync --no-dev
 
