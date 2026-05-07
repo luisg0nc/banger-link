@@ -54,6 +54,12 @@ sys.path.insert(0, str(ROOT))
 os.environ.setdefault("TELEGRAM_TOKEN", "stub:token-for-importer")
 
 from banger_link.handlers.messages import MUSIC_DOMAIN_SUFFIXES  # noqa: E402
+from banger_link.services.fallback_resolver import (  # noqa: E402
+    FallbackResolver,
+    ITunesSearchClient,
+    SpotifyAnonymousClient,
+    YouTubeSearchClient,
+)
 from banger_link.services.songlink import ResolvedSong, _parse  # noqa: E402
 
 logger = logging.getLogger("banger_link.import")
@@ -415,19 +421,31 @@ async def run(
         rate_limit_cool_down=cool_down,
         cache_only=cache_only,
     )
+    # Reuse the bot's gap-filler so the historical backfill carries Spotify /
+    # Apple Music / YouTube links Songlink wouldn't return on its own.
+    fallback = FallbackResolver(
+        spotify=SpotifyAnonymousClient(),
+        itunes=ITunesSearchClient(country=os.environ.get("FALLBACK_USER_COUNTRY", "US")),
+        youtube=YouTubeSearchClient(api_key=os.environ.get("YOUTUBE_API_KEY")),
+    )
 
     try:
         # Resolve all unique URLs up front so DB writes happen in one fast loop.
         resolved_by_url: dict[str, ResolvedSong | None] = {}
         for i, url in enumerate(sorted(unique_urls), start=1):
             resolved = await resolver.resolve(url)
-            if resolved is None:
-                logger.warning("[%d/%d] could not resolve %s", i, len(unique_urls), url)
-            else:
+            if resolved is not None:
+                try:
+                    resolved = await fallback.fill(resolved)
+                except Exception:
+                    logger.exception("fallback.fill raised; using Songlink result as-is")
                 logger.info("[%d/%d] %s — %s", i, len(unique_urls), resolved.title, resolved.artist)
+            else:
+                logger.warning("[%d/%d] could not resolve %s", i, len(unique_urls), url)
             resolved_by_url[url] = resolved
     finally:
         await client.aclose()
+        await fallback.aclose()
 
     if dry_run:
         skipped = sum(1 for v in resolved_by_url.values() if v is None)

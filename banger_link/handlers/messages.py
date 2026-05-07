@@ -8,7 +8,7 @@ from telegram import Update
 from telegram.ext import ContextTypes, MessageHandler, filters
 
 from banger_link.config import settings
-from banger_link.handlers._state import get_repo, get_songlink
+from banger_link.handlers._state import get_fallback, get_repo, get_songlink
 from banger_link.services.formatter import reaction_keyboard, share_message
 
 logger = logging.getLogger(__name__)
@@ -92,11 +92,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     songlink = get_songlink(context.bot_data)
     repo = get_repo(context.bot_data)
+    fallback = get_fallback(context.bot_data)
 
     resolved = await songlink.resolve(url)
     if resolved is None:
         logger.info("Could not resolve %s — staying silent", url)
         return
+
+    try:
+        resolved = await fallback.fill(resolved)
+    except Exception:
+        logger.exception("fallback resolver raised; using Songlink result as-is")
 
     song_id = await repo.upsert_song(
         entity_id=resolved.entity_id,

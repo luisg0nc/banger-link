@@ -16,6 +16,12 @@ from banger_link.handlers.inline import inline_query_handler
 from banger_link.handlers.messages import message_handler
 from banger_link.health import HealthServer
 from banger_link.jobs.digests import schedule_digests
+from banger_link.services.fallback_resolver import (
+    FallbackResolver,
+    ITunesSearchClient,
+    SpotifyAnonymousClient,
+    YouTubeSearchClient,
+)
 from banger_link.services.songlink import SonglinkClient
 
 logger = logging.getLogger(__name__)
@@ -40,7 +46,12 @@ async def _on_startup(application: Application) -> None:
     db = await Database(settings.db_path).connect()
     repo = Repo(db)
     songlink = SonglinkClient()
-    _state.install(application, repo=repo, songlink=songlink)
+    fallback = FallbackResolver(
+        spotify=SpotifyAnonymousClient(),
+        itunes=ITunesSearchClient(country=settings.fallback_user_country),
+        youtube=YouTubeSearchClient(api_key=settings.youtube_api_key),
+    )
+    _state.install(application, repo=repo, songlink=songlink, fallback=fallback)
 
     health = HealthServer(db, port=settings.health_port)
     await health.start()
@@ -57,6 +68,10 @@ async def _on_shutdown(application: Application) -> None:
     songlink = application.bot_data.get(_state.SONGLINK_KEY)
     if songlink is not None:
         await songlink.aclose()
+
+    fallback = application.bot_data.get(_state.FALLBACK_KEY)
+    if fallback is not None:
+        await fallback.aclose()
 
     health = application.bot_data.get(LIFECYCLE_KEY_HEALTH)
     if health is not None:

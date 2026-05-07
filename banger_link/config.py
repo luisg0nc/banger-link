@@ -30,6 +30,13 @@ class Settings(BaseSettings):
 
     songlink_api_url: HttpUrl = HttpUrl("https://api.song.link/v1-alpha.1/links")
 
+    # YouTube Data API key — optional; when missing, the YouTube fallback is a
+    # no-op and YouTube links remain blank for songs Songlink doesn't find.
+    youtube_api_key: str | None = None
+    # Country code for the iTunes Search fallback. Doesn't impact rankings much
+    # but does affect availability for region-locked tracks.
+    fallback_user_country: str = "US"
+
     digest_timezone: str = "UTC"
     digest_hour: int = 12  # post digests at this local hour
 
