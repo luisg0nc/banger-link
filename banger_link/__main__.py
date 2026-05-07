@@ -29,8 +29,10 @@ def _configure_logging() -> None:
         level=getattr(logging, settings.log_level.upper(), logging.INFO),
         format="%(asctime)s [%(levelname)8s] %(name)s: %(message)s",
     )
-    # PTB and httpx are noisy at DEBUG; clamp them to INFO unless explicitly asked.
-    for noisy in ("httpx", "telegram.ext.Application", "telegram.Bot"):
+    # httpx logs request URLs at INFO, which would leak the bot token into logs
+    # (the token is in the path of every Telegram API call). Keep it at WARNING.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    for noisy in ("telegram.ext.Application", "telegram.Bot", "apscheduler"):
         logging.getLogger(noisy).setLevel(logging.INFO)
 
 
