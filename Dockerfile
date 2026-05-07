@@ -11,7 +11,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Install uv from the official static binary image — small and reproducible.
-COPY --from=ghcr.io/astral-sh/uv:0.4.27 /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.9 /uv /uvx /usr/local/bin/
 
 # Install dependencies first to leverage the layer cache.
 COPY pyproject.toml uv.lock* ./
