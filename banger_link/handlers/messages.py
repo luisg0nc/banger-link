@@ -74,11 +74,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     if settings.whitelisted_chat_ids and chat.id not in settings.whitelisted_chat_ids:
-        logger.debug("Ignoring message from non-whitelisted chat: %s", chat.id)
+        logger.info(
+            "Dropping message from non-whitelisted chat_id=%s (user=%s)",
+            chat.id,
+            user.id,
+        )
         return
 
     url = _extract_url(message.text)
-    if not url or _is_ignored(url) or not _is_music_url(url):
+    if not url:
+        return
+    if _is_ignored(url):
+        logger.info("Dropping URL on ignored-domain list: %s", url)
+        return
+    if not _is_music_url(url):
         return
 
     songlink = get_songlink(context.bot_data)
