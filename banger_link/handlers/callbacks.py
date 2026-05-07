@@ -1,63 +1,64 @@
-"""Callback query handlers for the Telegram bot."""
+from __future__ import annotations
+
 import logging
-from typing import Optional, Tuple
 
 from telegram import Update
-from telegram.ext import ContextTypes, CallbackQueryHandler
+from telegram.error import BadRequest
+from telegram.ext import CallbackQueryHandler, ContextTypes
 
-from banger_link.handlers.base import BaseHandler
+from banger_link.handlers._state import get_repo
+from banger_link.services.formatter import reaction_keyboard, reaction_toast
 
 logger = logging.getLogger(__name__)
 
-class CallbackHandlers:
-    """Handles all callback queries from inline buttons."""
-    
-    @classmethod
-    def parse_callback_data(cls, data: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-        """
-        Parse callback data in the format 'action:type:data'.
-        
-        Args:
-            data: The callback data string
-            
-        Returns:
-            Tuple of (action, action_type, data)
-        """
-        if not data or ':' not in data:
-            return None, None, None
-            
-        parts = data.split(':', 2)
-        if len(parts) == 2:
-            return parts[0], None, parts[1]
-        return parts[0], parts[1], parts[2] if len(parts) > 2 else None
-    
-    @classmethod
-    async def handle_callback_query(cls, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle all callback queries."""
-        query = update.callback_query
-        
-        # Parse the callback data
-        action, action_type, data = cls.parse_callback_data(query.data)
-        
-        if not action:
-            await query.answer("Invalid action")
-            return
-        
-        try:
-            # Route to the appropriate handler
-            if action == 'reaction' and action_type in ['like', 'dislike'] and data:
-                await BaseHandler.handle_reaction(update, context, action_type, data)
-            elif action == 'download' and data:
-                await BaseHandler.handle_download(update, context, data)
-            else:
-                await query.answer("Unknown action")
-                
-        except Exception as e:
-            logger.error(f"Error handling callback query {query.data}: {e}")
-            await query.answer("An error occurred. Please try again.")
+KIND_FROM_LETTER = {"l": "like", "d": "dislike"}
 
-# Create callback handler instance
-callback_handlers = CallbackHandlers()
 
-# Export the callback query handler for use in the application
-callback_query_handler = CallbackQueryHandler(callback_handlers.handle_callback_query)
+async def handle_reaction(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if query is None or not query.data:
+        return
+
+    parts = query.data.split(":")
+    if len(parts) != 3 or parts[0] != "r":
+        await query.answer("Unknown action.")
+        return
+
+    try:
+        chat_song_id = int(parts[1])
+    except ValueError:
+        await query.answer("Invalid action.")
+        return
+
+    kind = KIND_FROM_LETTER.get(parts[2])
+    if kind is None:
+        await query.answer("Invalid reaction.")
+        return
+
+    user = query.from_user
+    if user is None:
+        await query.answer()
+        return
+
+    repo = get_repo(context.bot_data)
+    state = await repo.toggle_reaction(
+        chat_song_id=chat_song_id,
+        user_id=user.id,
+        kind=kind,  # type: ignore[arg-type]
+    )
+
+    keyboard = reaction_keyboard(
+        chat_song_id=chat_song_id, likes=state.likes, dislikes=state.dislikes
+    )
+    try:
+        await query.edit_message_reply_markup(reply_markup=keyboard)
+    except BadRequest as exc:
+        # Telegram returns "Message is not modified" if the keyboard happens to
+        # match — harmless, just log and continue.
+        if "not modified" not in str(exc).lower():
+            logger.warning("Could not edit reply markup: %s", exc)
+
+    await query.answer(reaction_toast(state, kind))
+
+
+callback_query_handler = CallbackQueryHandler(handle_reaction, pattern=r"^r:")

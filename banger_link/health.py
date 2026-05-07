@@ -1,33 +1,39 @@
-"""Health check endpoint for the Banger Link bot."""
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import threading
+from __future__ import annotations
+
 import logging
+
+from aiohttp import web
+
+from banger_link.db.connection import Database
 
 logger = logging.getLogger(__name__)
 
-class HealthHandler(BaseHTTPRequestHandler):
-    """Simple HTTP server handler for health checks."""
-    
-    def do_GET(self):
-        """Handle GET requests to the health check endpoint."""
-        if self.path == '/health':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(b'{"status": "ok"}')
-        else:
-            self.send_response(404)
-            self.end_headers()
 
-def run_health_check(port=8080):
-    """Run the health check HTTP server in a separate thread."""
-    def run():
-        server_address = ('', port)
-        httpd = HTTPServer(server_address, HealthHandler)
-        logger.info(f"Health check server running on port {port}")
-        httpd.serve_forever()
-    
-    # Start the health check server in a daemon thread
-    health_thread = threading.Thread(target=run, daemon=True)
-    health_thread.start()
-    return health_thread
+class HealthServer:
+    """Tiny aiohttp /health endpoint used by Docker's healthcheck."""
+
+    def __init__(self, db: Database, port: int) -> None:
+        self._db = db
+        self._port = port
+        self._runner: web.AppRunner | None = None
+
+    async def start(self) -> None:
+        app = web.Application()
+        app.router.add_get("/health", self._handler)
+        app.router.add_get("/", self._handler)
+        runner = web.AppRunner(app, access_log=None)
+        await runner.setup()
+        site = web.TCPSite(runner, host="0.0.0.0", port=self._port)
+        await site.start()
+        self._runner = runner
+        logger.info("Health server listening on :%d", self._port)
+
+    async def stop(self) -> None:
+        if self._runner is not None:
+            await self._runner.cleanup()
+            self._runner = None
+
+    async def _handler(self, request: web.Request) -> web.Response:
+        ok = await self._db.healthcheck()
+        status = 200 if ok else 503
+        return web.json_response({"status": "ok" if ok else "fail"}, status=status)

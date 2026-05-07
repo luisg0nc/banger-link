@@ -1,138 +1,118 @@
 <p align="center">
-  <a>
-    <img src="./docs/logo.png" alt="Banger Link Logo" width="200">
-  </a>
-  <h1 align="center">Banger Link</h1>
-  <p align="center">
-    Your music companion on Telegram 🎵
-    <br>
-    <a href="#-features">Features</a> •
-    <a href="#-installation">Installation</a> •
-    <a href="#-usage">Usage</a> •
-    <a href="#-deployment">Deployment</a>
-  </p>
-  <p align="center">
-    <a href="https://github.com/luisg0nc/banger-link/actions">
-      <img src="https://img.shields.io/github/actions/workflow/status/luisg0nc/banger-link/tests.yml?style=flat-square" alt="Build Status">
-    </a>
-    <a href="https://pypi.org/project/banger-link/">
-      <img src="https://img.shields.io/pypi/v/banger-link?style=flat-square" alt="PyPI">
-    </a>
-    <a href="https://github.com/luisg0nc/banger-link/blob/main/LICENSE">
-      <img src="https://img.shields.io/github/license/luisg0nc/banger-link?style=flat-square" alt="License">
-    </a>
-    <a href="https://python-telegram-bot.org">
-      <img src="https://img.shields.io/badge/python--telegram--bot-20.0-blue?style=flat-square" alt="python-telegram-bot">
-    </a>
-  </p>
+  <img src="./docs/logo.png" alt="Banger Link Logo" width="200">
 </p>
 
-## 💬 What is Banger Link?
+<h1 align="center">Banger Link</h1>
 
-Banger Link is a Telegram bot that bridges the gap between different music streaming services. Share a song link from Apple Music or Spotify, and the bot will find the corresponding YouTube video and let you download the audio.
+<p align="center">
+  Drop a music link in your Telegram chat. Get it back as links for every other major streaming service.
+</p>
 
-Perfect for group chats where friends use different music platforms!
+<p align="center">
+  <a href="https://github.com/luisg0nc/banger-link/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/luisg0nc/banger-link?style=flat-square" alt="License">
+  </a>
+  <img src="https://img.shields.io/badge/python-3.12-blue?style=flat-square" alt="Python 3.12">
+  <img src="https://img.shields.io/badge/python--telegram--bot-22-blue?style=flat-square" alt="python-telegram-bot 22">
+</p>
 
-## ✨ Features
+## What it does
 
-- 🔄 Convert Apple Music and Spotify links to YouTube
-- ⬇️ Download audio directly in your chat
-- 👍👎 Like/Dislike tracks to rate the best bangers
-- 📊 Track how many times a song has been shared
-- 🗂️ Persistent storage of shared songs
-- 🚀 Fast and responsive with modern async code
-- 🔒 Privacy-focused (no data collection)
+Share an Apple Music / Spotify / YouTube / Tidal / Deezer / SoundCloud (and more) link in any chat the bot is in. Banger Link replies with the song's title and artist plus a link for each service everyone else uses, so nobody has to copy-paste between apps.
 
-## 🚀 Installation
+It also keeps a per-chat history with 👍 / 👎 reactions, so over time the bot can answer "what were the bangers we shared this month?" via slash commands and inline mode.
+
+## Features
+
+- 🔁 **Any-to-any link conversion** via [Songlink/Odesli](https://song.link). One scraper-free dependency replaces the legacy per-platform scrapers.
+- 👍👎 **Per-user, per-chat reactions** stored in SQLite. Toggle on/off, switch between like and dislike.
+- 🏆 **Leaderboards** with `/top`, `/weekly`, `/monthly`.
+- 🔎 **Search** this chat's history with `/search <query>` or globally via inline mode (`@bangerbot oasis`).
+- 📅 **Weekly + monthly digests** posted automatically into active chats.
+- 📜 **Slash command menu** registered with Telegram so users see suggestions.
+- 🩺 **Healthcheck** on `:8080/health` for container orchestration.
+
+## Quick start
 
 ### Prerequisites
 
-- Python 3.8 or higher
-- A [Telegram bot token](https://core.telegram.org/bots#6-botfather)
-- A [YouTube Data API key](https://developers.google.com/youtube/registering_an_application)
+- Python 3.12+
+- [`uv`](https://docs.astral.sh/uv/) for dependency management
+- A Telegram bot token from [@BotFather](https://t.me/BotFather)
 
-### Local Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/luisg0nc/banger-link.git
-   cd banger-link
-   ```
-
-2. **Create and activate a virtual environment**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Configure environment variables**
-   Copy the example environment file and update it with your credentials:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your API keys
-   ```
-
-## 🎮 Usage
-
-### Running the Bot
+### Local development
 
 ```bash
-python -m banger_link
+uv sync --extra dev               # creates .venv and installs deps
+cp .env.example .env              # then edit TELEGRAM_TOKEN
+uv run python -m banger_link
 ```
 
-### Bot Commands
+For inline mode to work, send `/setinline` to BotFather.
 
-Just send a link to a song from Apple Music or Spotify, and the bot will handle the rest!
+### Tests
 
-- Share a music link in any chat where the bot is added
-- Use the buttons to like/dislike tracks
-- Download the audio with a single click
-
-## 🐳 Deployment
+```bash
+uv run pytest                     # full suite with coverage
+uv run pytest -k toggle --no-cov  # single test, no coverage report
+uv run ruff check . && uv run ruff format --check .
+uv run mypy banger_link
+```
 
 ### Docker
 
-1. Build and run with Docker Compose:
-   ```bash
-   docker-compose up -d --build
-   ```
+```bash
+docker compose up -d --build
+docker compose logs -f banger-link
+```
 
-2. Or build manually:
-   ```bash
-   docker build -t banger-link .
-   docker run -d --env-file .env banger-link
-   ```
+The container persists state under `./data/banger.db` (bind-mounted into `/app/data`).
 
-### Hosting
+## Configuration
 
-For production deployment, consider using:
+All configuration is read from environment variables (or `.env`). See [`.env.example`](.env.example) for the full list. The most useful knobs:
 
-- [Heroku](https://www.heroku.com/)
-- [Railway](https://railway.app/)
-- [PythonAnywhere](https://www.pythonanywhere.com/)
-- A VPS with Docker
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `TELEGRAM_TOKEN` | *(required)* | BotFather token. |
+| `WHITELISTED_CHAT_IDS` | empty | Comma-separated chat IDs. Empty = bot answers everywhere. |
+| `IGNORED_DOMAINS` | empty | Semicolon-separated domain substrings to skip. |
+| `DATA_DIR` | `./data` | Where the SQLite DB lives. |
+| `HEALTH_PORT` | `8080` | Port for `/health`. |
+| `LOG_LEVEL` | `INFO` | Standard Python log levels. |
+| `DIGEST_TIMEZONE` | `UTC` | IANA name (e.g. `Europe/Lisbon`). |
+| `DIGEST_HOUR` | `12` | Local hour at which digests are posted. |
 
-## 🤝 Contributing
+## Bot commands
 
-Contributions are welcome! Please read our [contributing guidelines](CONTRIBUTING.md) for details.
+| Command | What it does |
+| --- | --- |
+| `/help`, `/start` | Onboarding. |
+| `/top [N]` | Top N bangers in this chat (all-time, by `likes − dislikes`). |
+| `/weekly [N]` | Top of the last 7 days. |
+| `/monthly [N]` | Top of the last 30 days. |
+| `/search <query>` | Title/artist search across this chat's history. |
+| `@bangerbot <query>` | Inline mode — search the global song catalog from any chat. |
 
-## 📄 License
+## Architecture
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+```
+Telegram update
+  ├── MessageHandler → SonglinkClient → Repo (upsert song + record mention) → reply with reaction keyboard
+  ├── CallbackQueryHandler (pattern ^r:) → Repo.toggle_reaction → edit reply_markup
+  ├── CommandHandler(/top, /weekly, /monthly, /search, /help) → Repo.top_for_chat / search_chat
+  └── InlineQueryHandler → Repo.search_global → InlineQueryResultArticle list
 
-## 🙏 Credits
+JobQueue
+  ├── weekly-digest  (Mondays at DIGEST_HOUR) → leaderboards posted into active chats
+  └── monthly-digest (every day, no-ops unless day == 1)
 
-- [python-telegram-bot](https://python-telegram-bot.org/) - The best Python library for Telegram bots
-- [pytube](https://github.com/pytube/pytube) - For YouTube video downloads
-- [TinyDB](https://tinydb.readthedocs.io/) - For simple JSON-based storage
+Health server (aiohttp on :8080)
+  └── /health → SELECT 1 against the DB
+```
 
----
+Storage is a single SQLite database (WAL mode) with three tables: `songs` (global, dedup by Songlink `entityUniqueId`), `chat_songs` (one row per chat × song), and `reactions` (one row per chat_song × user). Likes/dislikes are computed at read time from `reactions` — no denormalized counters to keep in sync.
 
-<p align="center">
-  Made with ❤️ by <a href="https://github.com/luisg0nc">Luis Gonçalves</a>
-</p>
+## License
+
+MIT — see [LICENSE](LICENSE).

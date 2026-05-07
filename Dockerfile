@@ -1,50 +1,35 @@
-FROM python:3.11-slim
+FROM python:3.12-slim AS base
 
-# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    APP_USER=appuser
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    PATH="/opt/venv/bin:$PATH"
 
-# Set the working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    python3-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Install uv from the official static binary image — small and reproducible.
+COPY --from=ghcr.io/astral-sh/uv:0.4.27 /uv /uvx /usr/local/bin/
 
-# Copy requirements first to leverage Docker cache
-COPY pyproject.toml requirements.txt ./
+# Install dependencies first to leverage the layer cache.
+COPY pyproject.toml uv.lock* ./
+RUN uv sync --frozen --no-install-project --no-dev || uv sync --no-install-project --no-dev
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir -e .
+# Copy source and install the project itself.
+COPY banger_link ./banger_link
+RUN uv sync --no-dev
 
-# Copy the rest of the application
-COPY . .
+# Non-root runtime user owns /app/data so the bind-mounted volume is writable.
+RUN groupadd -g 1000 app && \
+    useradd -u 1000 -g app -s /usr/sbin/nologin -m app && \
+    mkdir -p /app/data && \
+    chown -R app:app /app
 
-# Create app user and directories with correct permissions
-RUN groupadd -g 1000 appgroup && \
-    useradd -u 1000 -g appgroup -s /bin/bash -m appuser && \
-    mkdir -p /app/data/downloads && \
-    chown -R 1000:1000 /app && \
-    chmod -R 755 /app && \
-    chmod 777 /app/data
-
-# Set volume for persistent data
+ENV DATA_DIR=/app/data
 VOLUME ["/app/data"]
+EXPOSE 8080
 
-# Set environment variables for data directories
-ENV DATA_DIR=/app/data \
-    DOWNLOAD_DIR=/app/data/downloads
-
-# Run as non-root user
-USER appuser
-
-# Run the bot
+USER app
 CMD ["python", "-m", "banger_link"]

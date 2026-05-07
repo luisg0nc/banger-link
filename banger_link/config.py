@@ -1,48 +1,57 @@
-"""Configuration settings for the Banger Link bot."""
-import os
+from __future__ import annotations
+
+from datetime import time
 from pathlib import Path
-from dotenv import load_dotenv
+from zoneinfo import ZoneInfo
 
-# Load environment variables from .env file
-load_dotenv()
+from pydantic import Field, HttpUrl, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Base directory
-BASE_DIR = Path(__file__).parent.parent
 
-# Telegram Bot Token
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_API_KEY')
-if not TELEGRAM_TOKEN:
-    raise ValueError("TELEGRAM_API_KEY environment variable is not set")
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
+    )
 
-# YouTube API Key
-YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
-if not YOUTUBE_API_KEY:
-    raise ValueError("YOUTUBE_API_KEY environment variable is not set")
+    telegram_token: str = Field(min_length=10)
 
-# File paths
-DATA_DIR = Path(os.getenv('DATA_DIR', str(BASE_DIR / 'data')))
-DOWNLOAD_DIR = Path(os.getenv('DOWNLOAD_DIR', str(DATA_DIR / 'downloads')))
-DB_PATH = DATA_DIR / 'db_music.json'
+    whitelisted_chat_ids: list[int] = Field(default_factory=list)
+    ignored_domains: list[str] = Field(default_factory=list)
 
-# Create directories if they don't exist
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    data_dir: Path = Path("./data")
+    log_level: str = "INFO"
+    health_port: int = 8080
 
-# Other settings
-IGNORED_DOMAINS = os.getenv('IGNORED_DOMAINS', '').split(';') if os.getenv('IGNORED_DOMAINS') else []
+    songlink_api_url: HttpUrl = HttpUrl("https://api.song.link/v1-alpha.1/links")
 
-# Parse WHITELISTED_CHAT_IDS, handling both positive and negative numbers
-whitelisted_chat_ids = []
-for x in os.getenv('WHITELISTED_CHAT_IDS', '').split(','):
-    x = x.strip()
-    try:
-        if x:  # Only process non-empty strings
-            whitelisted_chat_ids.append(int(x))
-    except ValueError:
-        logger.warning(f"Invalid chat ID in WHITELISTED_CHAT_IDS: {x}")
+    digest_timezone: str = "UTC"
+    digest_hour: int = 12  # post digests at this local hour
 
-WHITELISTED_CHAT_IDS = whitelisted_chat_ids
+    @field_validator("whitelisted_chat_ids", mode="before")
+    @classmethod
+    def _parse_chat_ids(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [int(p) for p in value.split(",") if p.strip()]
+        return value
 
-# Logging configuration
-LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
-LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    @field_validator("ignored_domains", mode="before")
+    @classmethod
+    def _parse_domains(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [p.strip() for p in value.split(";") if p.strip()]
+        return value
+
+    @property
+    def db_path(self) -> Path:
+        return self.data_dir / "banger.db"
+
+    @property
+    def digest_post_time(self) -> time:
+        return time(hour=self.digest_hour, tzinfo=ZoneInfo(self.digest_timezone))
+
+
+settings = Settings()
+settings.data_dir.mkdir(parents=True, exist_ok=True)
