@@ -15,7 +15,9 @@ footer covers the user-facing UX.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
+import struct
 import time
 from dataclasses import replace
 from typing import Any
@@ -39,6 +41,77 @@ DEFAULT_UA = (
     "Chrome/120.0.0.0 Safari/537.36"
 )
 
+# --- Spotify anonymous TOTP -------------------------------------------------
+#
+# Spotify's web player signs `/api/token` requests with a TOTP computed from a
+# secret embedded in their JS bundle. Anonymous open-source clients (spotipy-
+# anon, librespot, etc.) replicate the scheme: XOR each cipher byte with
+# `(index % 33) + 9`, join the decimal-string forms, and use those UTF-8 bytes
+# as the HMAC-SHA1 key. The 6-digit code is RFC 6238 with a 30 s window.
+#
+# Spotify rotates the cipher fairly often (a few times a year). Spotipy-anon
+# papers over this by fetching the latest dict at runtime from
+# https://git.gay/thereallo/totp-secrets/raw/branch/main/secrets/secretDict.json
+# (key = revision number, value = cipher bytes). When this stops working
+# — symptom: persistent 400 `{"totpVerExpired":"error",...}` from /api/token
+# — refresh the constants below from that JSON (use the highest-numbered key).
+#
+# Note: the wire `totpVer` parameter is independent of the dict's revision
+# number. Spotify's server keys off the cipher itself, not the version we send,
+# and `totpVer=5` continues to be accepted regardless of which cipher revision
+# we computed the TOTP from.
+#
+# Last refreshed: 2026-05-08 (cipher revision 61 from the upstream dict).
+_SPOTIFY_TOTP_CIPHER: tuple[int, ...] = (
+    44,
+    55,
+    47,
+    42,
+    70,
+    40,
+    34,
+    114,
+    76,
+    74,
+    50,
+    111,
+    120,
+    97,
+    75,
+    76,
+    94,
+    102,
+    43,
+    69,
+    49,
+    120,
+    118,
+    80,
+    64,
+    78,
+)
+_SPOTIFY_TOTP_WIRE_VERSION: int = 5
+
+
+def _spotify_totp_secret() -> bytes:
+    """Deobfuscate the cipher into the HMAC secret used by Spotify's web player."""
+    transformed = [byte ^ ((i % 33) + 9) for i, byte in enumerate(_SPOTIFY_TOTP_CIPHER)]
+    return "".join(str(b) for b in transformed).encode("utf-8")
+
+
+def _spotify_totp(now: float) -> str:
+    """6-digit RFC 6238 TOTP code for Spotify's `/api/token` endpoint."""
+    counter = struct.pack(">Q", int(now) // 30)
+    digest = hmac.new(_spotify_totp_secret(), counter, "sha1").digest()
+    offset = digest[-1] & 0x0F
+    code = (
+        (digest[offset] & 0x7F) << 24
+        | (digest[offset + 1] & 0xFF) << 16
+        | (digest[offset + 2] & 0xFF) << 8
+        | (digest[offset + 3] & 0xFF)
+    )
+    return f"{code % 1_000_000:06d}"
+
 
 class _SubClient:
     """Common shape for fallback sub-clients: own `httpx.AsyncClient`, search."""
@@ -61,19 +134,30 @@ class SpotifyAnonymousClient(_SubClient):
     """Spotify search using the anonymous bearer token open.spotify.com hands out.
 
     The flow mirrors what the public web player does: fetch a token from
-    `/get_access_token`, then use it on `api.spotify.com/v1/search`. No user
-    auth, no Premium account needed. The token is anonymous-tier and is
-    sufficient for read-only catalog endpoints.
+    `/api/token` (TOTP-signed), then use it on `api.spotify.com/v1/search`.
+    No user auth, no Premium account needed. The token is anonymous-tier and
+    is sufficient for read-only catalog endpoints.
+
+    Spotify retired the older `/get_access_token` endpoint (Varnish 403 URL
+    Blocked) in favor of `/api/token` with a TOTP query parameter. See the
+    `_spotify_totp` helper in this module for the secret-rotation pointer.
     """
 
-    TOKEN_URL = "https://open.spotify.com/get_access_token"
+    TOKEN_URL = "https://open.spotify.com/api/token"
     SEARCH_URL = "https://api.spotify.com/v1/search"
 
     def __init__(self, *, client: httpx.AsyncClient | None = None) -> None:
         self.enabled = True
         self._client = client or httpx.AsyncClient(
             timeout=httpx.Timeout(8.0),
-            headers={"User-Agent": DEFAULT_UA, "Accept": "application/json"},
+            headers={
+                "User-Agent": DEFAULT_UA,
+                "Accept": "application/json",
+                # Spotify's edge inspects these on /api/token (it didn't on
+                # /get_access_token) and 400s requests without them.
+                "Referer": "https://open.spotify.com/",
+                "Origin": "https://open.spotify.com",
+            },
         )
         self._owns_client = client is None
         self._token: str | None = None
@@ -90,11 +174,16 @@ class SpotifyAnonymousClient(_SubClient):
             # just-expired token.
             if self._token is not None and time.time() < self._expires_at - 30:
                 return self._token
+            now = time.time()
+            params = {
+                "reason": "init",
+                "productType": "web-player",
+                "totp": _spotify_totp(now),
+                "totpVer": str(_SPOTIFY_TOTP_WIRE_VERSION),
+                "ts": str(int(now * 1000)),
+            }
             try:
-                response = await self._client.get(
-                    self.TOKEN_URL,
-                    params={"reason": "transport", "productType": "web_player"},
-                )
+                response = await self._client.get(self.TOKEN_URL, params=params)
             except httpx.HTTPError as exc:
                 logger.warning("spotify token endpoint transport error: %s", exc)
                 return None

@@ -11,6 +11,7 @@ from banger_link.services.fallback_resolver import (
     ITunesSearchClient,
     SpotifyAnonymousClient,
     YouTubeSearchClient,
+    _spotify_totp,
 )
 from banger_link.services.songlink import ResolvedSong
 
@@ -31,9 +32,46 @@ def _resolved(**platform_links: str) -> ResolvedSong:
 # ---------------------------------------------------------------------------
 
 
+def test_spotify_totp_is_deterministic_and_six_digits() -> None:
+    # Same `now` → same code; different 30 s window → potentially different code.
+    code_a = _spotify_totp(1_700_000_000.0)
+    code_b = _spotify_totp(1_700_000_000.5)
+    code_c = _spotify_totp(1_700_000_030.0)
+    assert code_a == code_b  # same 30 s window
+    assert len(code_a) == 6 and code_a.isdigit()
+    assert len(code_c) == 6 and code_c.isdigit()
+
+
+@respx.mock
+async def test_spotify_token_request_carries_totp_params() -> None:
+    token_route = respx.get("https://open.spotify.com/api/token").respond(
+        json={
+            "accessToken": "tok",
+            "accessTokenExpirationTimestampMs": int((time.time() + 3600) * 1000),
+            "isAnonymous": True,
+        }
+    )
+    respx.get("https://api.spotify.com/v1/search").respond(
+        json={
+            "tracks": {
+                "items": [{"external_urls": {"spotify": "https://open.spotify.com/track/x"}}]
+            }
+        }
+    )
+    client = SpotifyAnonymousClient()
+    try:
+        await client.search(title="a", artist="b")
+    finally:
+        await client.aclose()
+    sent = token_route.calls.last.request
+    assert "totp=" in sent.url.query.decode()
+    assert "totpVer=" in sent.url.query.decode()
+    assert "ts=" in sent.url.query.decode()
+
+
 @respx.mock
 async def test_spotify_happy_path() -> None:
-    respx.get("https://open.spotify.com/get_access_token").respond(
+    respx.get("https://open.spotify.com/api/token").respond(
         json={
             "accessToken": "tok-123",
             "accessTokenExpirationTimestampMs": int((time.time() + 3600) * 1000),
@@ -62,7 +100,7 @@ async def test_spotify_happy_path() -> None:
 
 @respx.mock
 async def test_spotify_empty_results_returns_none() -> None:
-    respx.get("https://open.spotify.com/get_access_token").respond(
+    respx.get("https://open.spotify.com/api/token").respond(
         json={
             "accessToken": "tok-1",
             "accessTokenExpirationTimestampMs": int((time.time() + 3600) * 1000),
@@ -81,7 +119,7 @@ async def test_spotify_empty_results_returns_none() -> None:
 async def test_spotify_token_refresh_on_expiry() -> None:
     near_expiry = int((time.time() + 5) * 1000)  # within the 30s refresh-buffer
     fresh_expiry = int((time.time() + 3600) * 1000)
-    token_route = respx.get("https://open.spotify.com/get_access_token").mock(
+    token_route = respx.get("https://open.spotify.com/api/token").mock(
         side_effect=[
             httpx.Response(
                 200,
@@ -119,7 +157,7 @@ async def test_spotify_token_refresh_on_expiry() -> None:
 
 @respx.mock
 async def test_spotify_search_401_invalidates_token() -> None:
-    respx.get("https://open.spotify.com/get_access_token").mock(
+    respx.get("https://open.spotify.com/api/token").mock(
         side_effect=[
             httpx.Response(
                 200,
@@ -142,7 +180,7 @@ async def test_spotify_search_401_invalidates_token() -> None:
 
 @respx.mock
 async def test_spotify_token_endpoint_failure_returns_none() -> None:
-    respx.get("https://open.spotify.com/get_access_token").respond(status_code=500)
+    respx.get("https://open.spotify.com/api/token").respond(status_code=500)
     client = SpotifyAnonymousClient()
     try:
         assert await client.search(title="a", artist="b") is None
